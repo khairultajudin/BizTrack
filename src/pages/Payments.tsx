@@ -1,0 +1,320 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { useTemplate } from '../context/TemplateContext';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+import { Modal } from '../components/ui/Modal';
+import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
+import { Plus, Edit2, Trash2, CreditCard } from 'lucide-react';
+import { EmptyState } from '../core/ui/EmptyState';
+import { formatCurrency } from '../lib/currency';
+
+interface Payment {
+  id: string;
+  customer_id: string;
+  month: string;
+  year: number;
+  amount: number;
+  payment_date: string;
+  payment_method: string;
+  status: string;
+  reference_number?: string;
+  customers?: { name: string };
+}
+
+export const Payments: React.FC = () => {
+  const { t, settings } = useTemplate();
+  const { businessId, user } = useAuth();
+  
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [customers, setCustomers] = useState<{id: string, name: string}[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [entityToDelete, setEntityToDelete] = useState<{id: string, name: string} | null>(null);
+  
+  const currentMonth = new Date().toLocaleString('default', { month: 'long' });
+  const currentYear = new Date().getFullYear();
+
+  const [formData, setFormData] = useState({
+    customer_id: '', month: currentMonth, year: currentYear, amount: 0, 
+    payment_date: new Date().toISOString().split('T')[0], 
+    payment_method: 'Cash', status: 'Paid', reference_number: ''
+  });
+
+  const fetchData = useCallback(async () => {
+    if (!businessId) return;
+    const [payRes, custRes] = await Promise.all([
+      supabase.from('payments').select('*, customers(name)').eq('business_id', businessId).is('deleted_at', null).order('payment_date', { ascending: false }),
+      supabase.from('customers').select('id, name').eq('business_id', businessId).is('deleted_at', null)
+    ]);
+    
+    if (payRes.data) setPayments(payRes.data);
+    if (custRes.data) setCustomers(custRes.data);
+    setLoading(false);
+  }, [businessId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessId) return;
+
+    const payload = {
+      ...formData,
+      business_id: businessId
+    };
+
+    if (editingId) {
+      await supabase.from('payments').update(payload).eq('id', editingId);
+    } else {
+      await supabase.from('payments').insert([payload]);
+    }
+    
+    setIsModalOpen(false);
+    fetchData();
+  };
+
+  const handleEdit = (payment: Payment) => {
+    setFormData({
+      customer_id: payment.customer_id, 
+      month: payment.month, 
+      year: payment.year, 
+      amount: payment.amount, 
+      payment_date: payment.payment_date,
+      payment_method: payment.payment_method,
+      status: payment.status,
+      reference_number: payment.reference_number || ''
+    });
+    setEditingId(payment.id);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!businessId || !entityToDelete) return;
+    const { error } = await supabase.from('payments')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .eq('id', entityToDelete.id)
+      .eq('business_id', businessId);
+      
+    if (error) console.error(error);
+    else fetchData();
+    setEntityToDelete(null);
+    setDeleteModalOpen(false);
+  };
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+
+  const filteredPayments = payments.filter(p => {
+    const matchesSearch = 
+      (p.customers?.name && p.customers.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.month && p.month.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.payment_method && p.payment_method.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.payment_date && p.payment_date.includes(searchQuery));
+    const matchesStatus = statusFilter === 'All' || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const openNewModal = () => {
+    setFormData({
+      customer_id: customers.length > 0 ? customers[0].id : '', 
+      month: currentMonth, year: currentYear, amount: 0, 
+      payment_date: new Date().toISOString().split('T')[0], 
+      payment_method: 'Cash', status: 'Paid', reference_number: ''
+    });
+    setEditingId(null);
+    setIsModalOpen(true);
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{t('payments')}</h1>
+          <p className="text-muted">Track incoming collections from your {t('students').toLowerCase()}.</p>
+        </div>
+        <button onClick={openNewModal} className="btn btn-primary">
+          <Plus size={18} /> Record Payment
+        </button>
+      </header>
+
+      {/* Toolbar: Search and Filter */}
+      {payments.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+          <div className="relative w-full sm:w-72">
+            <input
+              type="text"
+              placeholder="Search payments..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="input w-full pl-9 pr-4 text-sm"
+            />
+            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-xs text-muted font-medium whitespace-nowrap">Filter Status:</span>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="input text-sm py-1.5 bg-white cursor-pointer"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Paid">Paid</option>
+              <option value="Pending">Pending</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="card p-12 text-center text-gray-500 flex justify-center items-center">
+          <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+      ) : payments.length === 0 ? (
+        <EmptyState 
+          icon={CreditCard} 
+          title={`No ${t('payments').toLowerCase()} yet`} 
+          description={`Record your first payment to track incoming collections from your ${t('students').toLowerCase()}.`}
+          actionLabel="Record Payment"
+          onAction={openNewModal}
+        />
+      ) : filteredPayments.length === 0 ? (
+        <div className="card p-8 text-center text-gray-500">
+          <p className="font-medium text-base text-gray-700">No matching payments found</p>
+          <p className="text-sm text-muted mt-1">Try adjusting your search query or filter settings.</p>
+        </div>
+      ) : (
+        <div className="card overflow-x-auto p-0">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50/50">
+                <th className="px-4 py-3 font-medium">Date</th>
+                <th className="px-4 py-3 font-medium">{t('students')}</th>
+                <th className="px-4 py-3 font-medium">For Period</th>
+                <th className="px-4 py-3 font-medium">Method</th>
+                <th className="px-4 py-3 font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm">
+              {filteredPayments.map(p => (
+                <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
+                  <td className="px-4 py-3.5 font-medium text-gray-900">{p.payment_date}</td>
+                  <td className="px-4 py-3.5">{p.customers?.name || '-'}</td>
+                  <td className="px-4 py-3.5">{p.month} {p.year}</td>
+                  <td className="px-4 py-3.5 text-muted">{p.payment_method}</td>
+                  <td className="px-4 py-3.5 font-semibold text-gray-900">{formatCurrency(p.amount)}</td>
+                  <td className="px-4 py-3.5">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${p.status === 'Paid' ? 'bg-green-100 text-green-800' : p.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                      {p.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3.5 text-right">
+                    <button onClick={() => handleEdit(p)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Edit"><Edit2 size={16} /></button>
+                    <button 
+                      onClick={() => {
+                        setEntityToDelete({ id: p.id, name: `Payment for ${p.customers?.name || 'Customer'}` });
+                        setDeleteModalOpen(true);
+                      }} 
+                      className="p-1 text-gray-400 hover:text-red-600 ml-2 transition-colors"
+                      title="Delete">
+                        <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? 'Edit Payment' : 'Record Payment'}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="input-group">
+            <label className="input-label">Select {t('students')}</label>
+            <select required className="input bg-white" value={formData.customer_id} onChange={e => setFormData({...formData, customer_id: e.target.value})}>
+              <option value="" disabled>-- Select --</option>
+              {customers.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="input-group">
+              <label className="input-label">Amount (RM)</label>
+              <input type="number" required className="input" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} />
+            </div>
+            <div className="input-group">
+              <label className="input-label">Date</label>
+              <input type="date" required className="input" value={formData.payment_date} onChange={e => setFormData({...formData, payment_date: e.target.value})} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="input-group">
+              <label className="input-label">For Month</label>
+              <select className="input bg-white" value={formData.month} onChange={e => setFormData({...formData, month: e.target.value})}>
+                {['January','February','March','April','May','June','July','August','September','October','November','December'].map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div className="input-group">
+              <label className="input-label">For Year</label>
+              <input type="number" required className="input" value={formData.year} onChange={e => setFormData({...formData, year: Number(e.target.value)})} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="input-group">
+              <label className="input-label">Method</label>
+              <select className="input bg-white" value={formData.payment_method} onChange={e => setFormData({...formData, payment_method: e.target.value})}>
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Credit Card">Credit Card</option>
+                <option value="Online">Online</option>
+              </select>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Status</label>
+              <select className="input bg-white" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+                <option value="Paid">Paid</option>
+                <option value="Pending">Pending</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-4">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-ghost">Cancel</button>
+            <button type="submit" className="btn btn-primary">{editingId ? 'Update' : 'Save'}</button>
+          </div>
+        </form>
+      </Modal>
+
+      {entityToDelete && businessId && (
+        <DeleteConfirmationModal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          onConfirm={handleDeleteConfirm}
+          entityType="payment"
+          entityId={entityToDelete.id}
+          entityName={entityToDelete.name}
+          businessId={businessId}
+        />
+      )}
+    </div>
+  );
+};
