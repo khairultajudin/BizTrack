@@ -3,6 +3,18 @@ import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, User } from 'lucide-react';
 
+const getAuthRedirectUrl = () => {
+  const customUrl = import.meta.env.VITE_APP_URL || import.meta.env.VITE_SITE_URL;
+  if (customUrl) {
+    const formattedUrl = customUrl.startsWith('http://') || customUrl.startsWith('https://') 
+      ? customUrl 
+      : `https://${customUrl}`;
+    return formattedUrl.endsWith('/') ? formattedUrl : `${formattedUrl}/`;
+  }
+  const origin = window.location.origin;
+  return origin.endsWith('/') ? origin : `${origin}/`;
+};
+
 export const Login: React.FC = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -21,10 +33,12 @@ export const Login: React.FC = () => {
     
     try {
       if (isSignUp) {
+        const redirectUrl = getAuthRedirectUrl();
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
+            emailRedirectTo: redirectUrl,
             data: { full_name: fullName }
           }
         });
