@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
-import { Plus, Edit2, Trash2, CreditCard } from 'lucide-react';
+import { Plus, Edit2, Trash2, CreditCard, AlertCircle } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
 
@@ -22,12 +22,14 @@ interface Payment {
 }
 
 export const Payments: React.FC = () => {
-  const { t, settings } = useTemplate();
+  const { t } = useTemplate();
   const { businessId, user } = useAuth();
   
   const [payments, setPayments] = useState<Payment[]>([]);
   const [customers, setCustomers] = useState<{id: string, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -60,24 +62,74 @@ export const Payments: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!businessId) return;
+    setFormError(null);
+
+    if (!businessId) {
+      setFormError('Workspace context missing. Please refresh the page and try again.');
+      return;
+    }
+
+    if (!formData.customer_id) {
+      setFormError(`Please select a ${t('students').toLowerCase()}.`);
+      return;
+    }
+
+    setSubmitting(true);
 
     const payload = {
-      ...formData,
+      customer_id: formData.customer_id,
+      month: formData.month,
+      year: Number(formData.year),
+      amount: isNaN(Number(formData.amount)) ? 0 : Number(formData.amount),
+      payment_date: formData.payment_date,
+      payment_method: formData.payment_method || 'Cash',
+      status: formData.status || 'Paid',
+      reference_number: formData.reference_number.trim() || null,
       business_id: businessId
     };
 
-    if (editingId) {
-      await supabase.from('payments').update(payload).eq('id', editingId);
-    } else {
-      await supabase.from('payments').insert([payload]);
+    try {
+      let saveError: any = null;
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('payments')
+          .update(payload)
+          .eq('id', editingId)
+          .eq('business_id', businessId);
+        saveError = error;
+      } else {
+        const { error } = await supabase
+          .from('payments')
+          .insert([payload]);
+        saveError = error;
+      }
+
+      if (saveError) {
+        console.error('Supabase error saving payment:', {
+          message: saveError.message,
+          details: saveError.details,
+          hint: saveError.hint,
+          code: saveError.code,
+          fullError: saveError
+        });
+        setFormError(saveError.message || 'Unable to save payment record. Please check your input.');
+        setSubmitting(false);
+        return; // DO NOT close modal on error
+      }
+
+      setSubmitting(false);
+      setIsModalOpen(false);
+      fetchData();
+    } catch (err: any) {
+      console.error('Unexpected error in handleSubmit:', err);
+      setFormError(err.message || 'An unexpected error occurred while saving.');
+      setSubmitting(false);
     }
-    
-    setIsModalOpen(false);
-    fetchData();
   };
 
   const handleEdit = (payment: Payment) => {
+    setFormError(null);
     setFormData({
       customer_id: payment.customer_id, 
       month: payment.month, 
@@ -119,6 +171,7 @@ export const Payments: React.FC = () => {
   });
 
   const openNewModal = () => {
+    setFormError(null);
     setFormData({
       customer_id: customers.length > 0 ? customers[0].id : '', 
       month: currentMonth, year: currentYear, amount: 0, 
@@ -241,31 +294,46 @@ export const Payments: React.FC = () => {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? 'Edit Payment' : 'Record Payment'}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {formError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-red-800">Unable to save payment</p>
+                <p className="text-xs text-red-600 mt-0.5">{formError}</p>
+              </div>
+            </div>
+          )}
+
           <div className="input-group">
             <label className="input-label">Select {t('students')}</label>
-            <select required className="input bg-white" value={formData.customer_id} onChange={e => setFormData({...formData, customer_id: e.target.value})}>
+            <select required className="input bg-white text-base sm:text-sm" value={formData.customer_id} onChange={e => { setFormError(null); setFormData({...formData, customer_id: e.target.value}); }}>
               <option value="" disabled>-- Select --</option>
               {customers.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+            {customers.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                No students found. Add a student first to record payments.
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="input-group">
               <label className="input-label">Amount (RM)</label>
-              <input type="number" required className="input" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} />
+              <input type="number" required min="0" step="any" className="input text-base sm:text-sm" value={formData.amount} onChange={e => { setFormError(null); setFormData({...formData, amount: Number(e.target.value)}); }} />
             </div>
             <div className="input-group">
               <label className="input-label">Date</label>
-              <input type="date" required className="input" value={formData.payment_date} onChange={e => setFormData({...formData, payment_date: e.target.value})} />
+              <input type="date" required className="input text-base sm:text-sm" value={formData.payment_date} onChange={e => { setFormError(null); setFormData({...formData, payment_date: e.target.value}); }} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="input-group">
               <label className="input-label">For Month</label>
-              <select className="input bg-white" value={formData.month} onChange={e => setFormData({...formData, month: e.target.value})}>
+              <select className="input bg-white text-base sm:text-sm" value={formData.month} onChange={e => { setFormError(null); setFormData({...formData, month: e.target.value}); }}>
                 {['January','February','March','April','May','June','July','August','September','October','November','December'].map(m => (
                   <option key={m} value={m}>{m}</option>
                 ))}
@@ -273,14 +341,14 @@ export const Payments: React.FC = () => {
             </div>
             <div className="input-group">
               <label className="input-label">For Year</label>
-              <input type="number" required className="input" value={formData.year} onChange={e => setFormData({...formData, year: Number(e.target.value)})} />
+              <input type="number" required className="input text-base sm:text-sm" value={formData.year} onChange={e => { setFormError(null); setFormData({...formData, year: Number(e.target.value)}); }} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="input-group">
               <label className="input-label">Method</label>
-              <select className="input bg-white" value={formData.payment_method} onChange={e => setFormData({...formData, payment_method: e.target.value})}>
+              <select className="input bg-white text-base sm:text-sm" value={formData.payment_method} onChange={e => { setFormError(null); setFormData({...formData, payment_method: e.target.value}); }}>
                 <option value="Cash">Cash</option>
                 <option value="Bank Transfer">Bank Transfer</option>
                 <option value="Credit Card">Credit Card</option>
@@ -289,7 +357,7 @@ export const Payments: React.FC = () => {
             </div>
             <div className="input-group">
               <label className="input-label">Status</label>
-              <select className="input bg-white" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+              <select className="input bg-white text-base sm:text-sm" value={formData.status} onChange={e => { setFormError(null); setFormData({...formData, status: e.target.value}); }}>
                 <option value="Paid">Paid</option>
                 <option value="Pending">Pending</option>
                 <option value="Cancelled">Cancelled</option>
@@ -297,9 +365,11 @@ export const Payments: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 mt-4">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-ghost">Cancel</button>
-            <button type="submit" className="btn btn-primary">{editingId ? 'Update' : 'Save'}</button>
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-4">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-ghost w-full sm:w-auto" disabled={submitting}>Cancel</button>
+            <button type="submit" className="btn btn-primary w-full sm:w-auto min-w-[120px]" disabled={submitting}>
+              {submitting ? 'Saving...' : (editingId ? 'Update' : 'Save')}
+            </button>
           </div>
         </form>
       </Modal>
@@ -318,3 +388,4 @@ export const Payments: React.FC = () => {
     </div>
   );
 };
+

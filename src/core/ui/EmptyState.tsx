@@ -8,6 +8,7 @@ interface EmptyStateProps {
   description: string;
   actionLabel?: string;
   onAction?: () => void;
+  children?: React.ReactNode;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ 
@@ -15,7 +16,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   title, 
   description, 
   actionLabel, 
-  onAction 
+  onAction,
+  children
 }) => {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-xl border border-gray-100 border-dashed">
@@ -29,6 +31,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         <Button onClick={onAction}>
           {actionLabel}
         </Button>
+      )}
+
+      {children && (
+        <div className="mt-6 w-full max-w-md">
+          {children}
+        </div>
       )}
     </div>
   );

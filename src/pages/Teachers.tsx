@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
-import { Plus, Edit2, Trash2, GraduationCap } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, AlertCircle } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
 
@@ -18,11 +18,13 @@ interface Staff {
 }
 
 export const Teachers: React.FC = () => {
-  const { t, settings } = useTemplate();
+  const { t } = useTemplate();
   const { businessId, user } = useAuth();
   
-  const [staff, setStaff] = useState<any[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -52,19 +54,72 @@ export const Teachers: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!businessId) return;
+    setFormError(null);
 
-    if (editingId) {
-      await supabase.from('staff').update(formData).eq('id', editingId);
-    } else {
-      await supabase.from('staff').insert([{ ...formData, business_id: businessId }]);
+    if (!businessId) {
+      setFormError('Workspace context missing. Please refresh the page and try again.');
+      return;
     }
-    
-    setIsModalOpen(false);
-    fetchStaff();
+
+    const nameTrimmed = formData.name.trim();
+    if (!nameTrimmed) {
+      setFormError('Teacher/Staff name is required.');
+      return;
+    }
+
+    setSubmitting(true);
+
+    const payload = {
+      name: nameTrimmed,
+      role: formData.role.trim() || 'Teacher',
+      phone: formData.phone.trim() || null,
+      salary_type: formData.salary_type || 'Monthly',
+      salary_amount: isNaN(Number(formData.salary_amount)) ? 0 : Number(formData.salary_amount),
+      business_id: businessId
+    };
+
+    try {
+      let saveError: any = null;
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('staff')
+          .update(payload)
+          .eq('id', editingId)
+          .eq('business_id', businessId);
+        saveError = error;
+      } else {
+        const { error } = await supabase
+          .from('staff')
+          .insert([payload]);
+        saveError = error;
+      }
+
+      if (saveError) {
+        console.error('Supabase error saving teacher:', {
+          message: saveError.message,
+          details: saveError.details,
+          hint: saveError.hint,
+          code: saveError.code,
+          fullError: saveError
+        });
+        setFormError(saveError.message || 'Unable to save teacher record. Please check your input.');
+        setSubmitting(false);
+        return; // DO NOT close modal on error
+      }
+
+      setSubmitting(false);
+      setIsModalOpen(false);
+      fetchStaff();
+    } catch (err: any) {
+      console.error('Unexpected error in handleSubmit:', err);
+      setFormError(err.message || 'An unexpected error occurred while saving.');
+      setSubmitting(false);
+    }
   };
 
   const handleEdit = (member: Staff) => {
+    setFormError(null);
     setFormData({
       name: member.name, role: member.role || '', phone: member.phone || '', 
       salary_type: member.salary_type || 'Monthly', salary_amount: member.salary_amount || 0
@@ -98,6 +153,7 @@ export const Teachers: React.FC = () => {
   });
 
   const openNewModal = () => {
+    setFormError(null);
     setFormData({ name: '', role: '', phone: '', salary_type: 'Monthly', salary_amount: 0 });
     setEditingId(null);
     setIsModalOpen(true);
@@ -147,7 +203,20 @@ export const Teachers: React.FC = () => {
           description={`Add your first ${t('teachers').toLowerCase()} to start assigning them to ${t('classes').toLowerCase()} and managing payroll.`}
           actionLabel={`Add ${t('teachers')}`}
           onAction={openNewModal}
-        />
+        >
+          <div className="bg-blue-50/80 border border-blue-100 rounded-lg p-3 text-left text-xs text-blue-900 flex flex-col gap-1.5">
+            <span className="font-semibold text-blue-800">💡 Recommended Setup Sequence:</span>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-blue-700">
+              <span className="font-medium bg-white px-2 py-0.5 rounded border border-blue-300 text-blue-900">1. Add Teachers</span>
+              <span>➔</span>
+              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">2. Create Classes (e.g. Year 2)</span>
+              <span>➔</span>
+              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">3. Add Students</span>
+              <span>➔</span>
+              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">4. Payments</span>
+            </div>
+          </div>
+        </EmptyState>
       ) : filteredStaff.length === 0 ? (
         <div className="card p-8 text-center text-gray-500">
           <p className="font-medium text-base text-gray-700">No matching {t('teachers').toLowerCase()} found</p>
@@ -190,22 +259,32 @@ export const Teachers: React.FC = () => {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? `Edit ${t('teachers')}` : `New ${t('teachers')}`}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {formError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-red-800">Unable to save teacher</p>
+                <p className="text-xs text-red-600 mt-0.5">{formError}</p>
+              </div>
+            </div>
+          )}
+
           <div className="input-group">
             <label className="input-label">Name</label>
-            <input required type="text" className="input" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            <input required type="text" className="input text-base sm:text-sm" value={formData.name} onChange={e => { setFormError(null); setFormData({...formData, name: e.target.value}); }} placeholder="e.g. Cikgu Sarah" />
           </div>
           <div className="input-group">
             <label className="input-label">Role</label>
-            <input type="text" className="input" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} />
+            <input type="text" className="input text-base sm:text-sm" value={formData.role} onChange={e => { setFormError(null); setFormData({...formData, role: e.target.value}); }} placeholder="e.g. Science Instructor" />
           </div>
           <div className="input-group">
             <label className="input-label">Phone</label>
-            <input type="text" className="input" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+            <input type="text" className="input text-base sm:text-sm" value={formData.phone} onChange={e => { setFormError(null); setFormData({...formData, phone: e.target.value}); }} placeholder="e.g. 0123456789" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="input-group">
               <label className="input-label">Salary Type</label>
-              <select className="input bg-white" value={formData.salary_type} onChange={e => setFormData({...formData, salary_type: e.target.value})}>
+              <select className="input bg-white text-base sm:text-sm" value={formData.salary_type} onChange={e => { setFormError(null); setFormData({...formData, salary_type: e.target.value}); }}>
                 <option value="Monthly">Monthly</option>
                 <option value="Hourly">Hourly</option>
                 <option value="Commission">Commission</option>
@@ -213,12 +292,14 @@ export const Teachers: React.FC = () => {
             </div>
             <div className="input-group">
               <label className="input-label">Amount (RM)</label>
-              <input type="number" required className="input" value={formData.salary_amount} onChange={e => setFormData({...formData, salary_amount: Number(e.target.value)})} />
+              <input type="number" required min="0" step="any" className="input text-base sm:text-sm" value={formData.salary_amount} onChange={e => { setFormError(null); setFormData({...formData, salary_amount: Number(e.target.value)}); }} />
             </div>
           </div>
-          <div className="flex justify-end gap-3 mt-4">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-ghost">Cancel</button>
-            <button type="submit" className="btn btn-primary">{editingId ? 'Update' : 'Create'}</button>
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-4">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-ghost w-full sm:w-auto" disabled={submitting}>Cancel</button>
+            <button type="submit" className="btn btn-primary w-full sm:w-auto min-w-[120px]" disabled={submitting}>
+              {submitting ? 'Saving...' : (editingId ? 'Update' : 'Create')}
+            </button>
           </div>
         </form>
       </Modal>
@@ -237,3 +318,4 @@ export const Teachers: React.FC = () => {
     </div>
   );
 };
+

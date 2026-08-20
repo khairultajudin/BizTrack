@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
-import { Plus, Edit2, Trash2, Users, BookOpen } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, BookOpen, AlertCircle } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
 
@@ -20,12 +20,14 @@ interface Group {
 }
 
 export const Classes: React.FC = () => {
-  const { t, settings } = useTemplate();
+  const { t } = useTemplate();
   const { businessId, user } = useAuth();
   
   const [groups, setGroups] = useState<Group[]>([]);
   const [teachers, setTeachers] = useState<{id: string, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -53,25 +55,73 @@ export const Classes: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!businessId) return;
+    setFormError(null);
+
+    if (!businessId) {
+      setFormError('Workspace context missing. Please refresh the page and try again.');
+      return;
+    }
+
+    const nameTrimmed = formData.name.trim();
+    if (!nameTrimmed) {
+      setFormError('Class name is required.');
+      return;
+    }
+
+    setSubmitting(true);
 
     const payload = {
-      ...formData,
+      name: nameTrimmed,
       teacher_id: formData.teacher_id || null,
+      monthly_fee: isNaN(Number(formData.monthly_fee)) ? 0 : Number(formData.monthly_fee),
+      max_students: isNaN(Number(formData.max_students)) ? 20 : Number(formData.max_students),
+      status: formData.status || 'Active',
+      description: formData.description.trim() || null,
       business_id: businessId
     };
 
-    if (editingId) {
-      await supabase.from('groups').update(payload).eq('id', editingId);
-    } else {
-      await supabase.from('groups').insert([payload]);
+    try {
+      let saveError: any = null;
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('groups')
+          .update(payload)
+          .eq('id', editingId)
+          .eq('business_id', businessId);
+        saveError = error;
+      } else {
+        const { error } = await supabase
+          .from('groups')
+          .insert([payload]);
+        saveError = error;
+      }
+
+      if (saveError) {
+        console.error('Supabase error saving class:', {
+          message: saveError.message,
+          details: saveError.details,
+          hint: saveError.hint,
+          code: saveError.code,
+          fullError: saveError
+        });
+        setFormError(saveError.message || 'Unable to save class. Please check your input and try again.');
+        setSubmitting(false);
+        return; // DO NOT close modal on error
+      }
+
+      setSubmitting(false);
+      setIsModalOpen(false);
+      fetchData();
+    } catch (err: any) {
+      console.error('Unexpected error in handleSubmit:', err);
+      setFormError(err.message || 'An unexpected error occurred while saving.');
+      setSubmitting(false);
     }
-    
-    setIsModalOpen(false);
-    fetchData();
   };
 
   const handleEdit = (group: Group) => {
+    setFormError(null);
     setFormData({
       name: group.name, 
       teacher_id: group.teacher_id || '', 
@@ -110,6 +160,7 @@ export const Classes: React.FC = () => {
   });
 
   const openNewModal = () => {
+    setFormError(null);
     setFormData({ name: '', teacher_id: '', monthly_fee: 0, max_students: 20, status: 'Active', description: '' });
     setEditingId(null);
     setIsModalOpen(true);
@@ -169,10 +220,23 @@ export const Classes: React.FC = () => {
         <EmptyState 
           icon={BookOpen} 
           title={`No ${t('classes').toLowerCase()} yet`} 
-          description={`Add your first ${t('classes').toLowerCase()} to start assigning ${t('teachers').toLowerCase()} and enrolling students.`}
+          description={`Create your first ${t('classes').toLowerCase()} (e.g. Year 2, Form 1) to organize students and assign teachers.`}
           actionLabel={`Add ${t('classes')}`}
           onAction={openNewModal}
-        />
+        >
+          <div className="bg-blue-50/80 border border-blue-100 rounded-lg p-3 text-left text-xs text-blue-900 flex flex-col gap-1.5">
+            <span className="font-semibold text-blue-800">💡 Recommended Setup Sequence:</span>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-blue-700">
+              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">1. Add Teachers</span>
+              <span>➔</span>
+              <span className="font-medium bg-white px-2 py-0.5 rounded border border-blue-300 text-blue-900">2. Create Classes</span>
+              <span>➔</span>
+              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">3. Add Students</span>
+              <span>➔</span>
+              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">4. Payments</span>
+            </div>
+          </div>
+        </EmptyState>
       ) : filteredGroups.length === 0 ? (
         <div className="card p-8 text-center text-gray-500">
           <p className="font-medium text-base text-gray-700">No matching {t('classes').toLowerCase()} found</p>
@@ -217,45 +281,68 @@ export const Classes: React.FC = () => {
         </div>
       )}
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? `Edit ${t('classes')}` : `New ${t('classes')}`}>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? `Edit ${t('classes')}` : `Add New ${t('classes')}`}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <p className="text-xs text-muted -mt-1">Create a learning class or grade level for your tuition centre (e.g. Year 2, Form 1, Standard 3).</p>
+
+          {formError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-red-800">Unable to save class</p>
+                <p className="text-xs text-red-600 mt-0.5">{formError}</p>
+              </div>
+            </div>
+          )}
+
           <div className="input-group">
-            <label className="input-label">Name</label>
-            <input required type="text" className="input" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            <label className="input-label">Class Name</label>
+            <input required type="text" className="input text-base sm:text-sm" value={formData.name} onChange={e => { setFormError(null); setFormData({...formData, name: e.target.value}); }} placeholder="e.g. Year 2, Form 1, Standard 3" />
           </div>
           
           <div className="input-group">
             <label className="input-label">Assign {t('teachers')}</label>
-            <select className="input bg-white" value={formData.teacher_id} onChange={e => setFormData({...formData, teacher_id: e.target.value})}>
+            <select className="input bg-white text-base sm:text-sm" value={formData.teacher_id} onChange={e => { setFormError(null); setFormData({...formData, teacher_id: e.target.value}); }}>
               <option value="">-- None --</option>
               {teachers.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
+            {teachers.length === 0 ? (
+              <p className="text-xs text-amber-600 mt-1">
+                No teachers added yet. You can create a teacher from the <a href="/teachers" className="underline font-medium text-amber-700 hover:text-amber-900">Teachers page</a> first, or assign one later.
+              </p>
+            ) : (
+              <p className="text-xs text-muted mt-1">
+                Optional. Select a teacher or leave as "-- None --".
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="input-group">
               <label className="input-label">Monthly Fee (RM)</label>
-              <input type="number" required className="input" value={formData.monthly_fee} onChange={e => setFormData({...formData, monthly_fee: Number(e.target.value)})} />
+              <input type="number" required min="0" step="any" className="input text-base sm:text-sm" value={formData.monthly_fee} onChange={e => { setFormError(null); setFormData({...formData, monthly_fee: Number(e.target.value)}); }} />
             </div>
             <div className="input-group">
               <label className="input-label">Max Capacity</label>
-              <input type="number" required className="input" value={formData.max_students} onChange={e => setFormData({...formData, max_students: Number(e.target.value)})} />
+              <input type="number" required min="1" className="input text-base sm:text-sm" value={formData.max_students} onChange={e => { setFormError(null); setFormData({...formData, max_students: Number(e.target.value)}); }} />
             </div>
           </div>
 
           <div className="input-group">
             <label className="input-label">Status</label>
-            <select className="input bg-white" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+            <select className="input bg-white text-base sm:text-sm" value={formData.status} onChange={e => { setFormError(null); setFormData({...formData, status: e.target.value}); }}>
               <option value="Active">Active</option>
               <option value="Archived">Archived</option>
             </select>
           </div>
 
-          <div className="flex justify-end gap-3 mt-4">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-ghost">Cancel</button>
-            <button type="submit" className="btn btn-primary w-full">{editingId ? 'Update' : 'Create'}</button>
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-4">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-ghost w-full sm:w-auto" disabled={submitting}>Cancel</button>
+            <button type="submit" className="btn btn-primary w-full sm:w-auto min-w-[120px]" disabled={submitting}>
+              {submitting ? 'Saving...' : (editingId ? 'Update' : 'Create')}
+            </button>
           </div>
         </form>
       </Modal>
@@ -274,3 +361,4 @@ export const Classes: React.FC = () => {
     </div>
   );
 };
+
