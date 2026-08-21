@@ -166,17 +166,17 @@ export const Teachers: React.FC = () => {
           <p className="text-muted">Manage your staff and instructors.</p>
         </div>
         <button onClick={openNewModal} className="btn btn-primary">
-          <Plus size={18} /> Add {t('teachers')}
+          <Plus size={18} /> Add Teacher
         </button>
       </header>
 
       {/* Toolbar: Search */}
       {staff.length > 0 && (
-        <div className="flex items-center bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
           <div className="relative w-full sm:w-72">
             <input
               type="text"
-              placeholder={`Search ${t('teachers').toLowerCase()}...`}
+              placeholder="Search teachers..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="input w-full pl-9 pr-4 text-sm"
@@ -198,9 +198,9 @@ export const Teachers: React.FC = () => {
       ) : staff.length === 0 ? (
         <EmptyState 
           icon={GraduationCap} 
-          title={`No ${t('teachers').toLowerCase()} yet`} 
-          description={`Add your first ${t('teachers').toLowerCase()} to start assigning them to ${t('classes').toLowerCase()} and managing payroll.`}
-          actionLabel={`Add ${t('teachers')}`}
+          title="No teachers yet" 
+          description="Add your first teacher to start assigning them to classes and managing payroll."
+          actionLabel="Add Teacher"
           onAction={openNewModal}
         >
           <div className="bg-blue-50/80 border border-blue-100 rounded-lg p-3 text-left text-xs text-blue-900 flex flex-col gap-1.5">
@@ -218,7 +218,7 @@ export const Teachers: React.FC = () => {
         </EmptyState>
       ) : filteredStaff.length === 0 ? (
         <div className="card p-8 text-center text-gray-500">
-          <p className="font-medium text-base text-gray-700">No matching {t('teachers').toLowerCase()} found</p>
+          <p className="font-medium text-base text-gray-700">No matching teachers found</p>
           <p className="text-sm text-muted mt-1">Try adjusting your search query.</p>
         </div>
       ) : (
@@ -238,10 +238,10 @@ export const Teachers: React.FC = () => {
               {filteredStaff.map(s => (
                 <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
                   <td className="px-4 py-3.5 font-medium text-gray-900">{s.name}</td>
-                  <td className="px-4 py-3.5">{s.role || '-'}</td>
+                  <td className="px-4 py-3.5 text-gray-600">{s.role || '-'}</td>
                   <td className="px-4 py-3.5 text-muted">{s.phone || '-'}</td>
                   <td className="px-4 py-3.5">{s.salary_type}</td>
-                  <td className="px-4 py-3.5 font-medium">{formatCurrency(s.salary_amount)}</td>
+                  <td className="px-4 py-3.5 font-medium text-gray-900">{formatCurrency(s.salary_amount)}</td>
                   <td className="px-4 py-3.5 text-right">
                     <button onClick={() => handleEdit(s)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Edit"><Edit2 size={16} /></button>
                     <button onClick={() => {
@@ -256,8 +256,10 @@ export const Teachers: React.FC = () => {
         </div>
       )}
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? `Edit ${t('teachers')}` : `New ${t('teachers')}`}>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? `Edit ${t('teachers')}` : `Add New ${t('teachers')}`}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <p className="text-xs text-muted -mt-1">Enter staff details and salary configuration.</p>
+
           {formError && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2.5">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
@@ -269,7 +271,7 @@ export const Teachers: React.FC = () => {
           )}
 
           <div className="input-group">
-            <label className="input-label">Name</label>
+            <label className="input-label">Teacher Name</label>
             <input required type="text" className="input text-base sm:text-sm" value={formData.name} onChange={e => { setFormError(null); setFormData({...formData, name: e.target.value}); }} placeholder="e.g. Cikgu Sarah" />
           </div>
           <div className="input-group">
