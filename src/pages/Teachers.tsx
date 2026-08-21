@@ -222,32 +222,52 @@ export const Teachers: React.FC = () => {
           <p className="text-sm text-muted mt-1">Try adjusting your search query.</p>
         </div>
       ) : (
-        <div className="card overflow-x-auto p-0">
+        <div className="card overflow-x-auto p-0 border border-gray-200 shadow-sm rounded-xl">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50/50">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Role</th>
-                <th className="px-4 py-3 font-medium">Phone</th>
-                <th className="px-4 py-3 font-medium">Salary Type</th>
-                <th className="px-4 py-3 font-medium">Amount</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50/70">
+                <th className="px-6 py-3.5 font-semibold">Name</th>
+                <th className="px-6 py-3.5 font-semibold">Role</th>
+                <th className="px-6 py-3.5 font-semibold">Phone</th>
+                <th className="px-6 py-3.5 font-semibold">Salary Type</th>
+                <th className="px-6 py-3.5 font-semibold text-right">Amount</th>
+                <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="text-sm">
+            <tbody className="divide-y divide-gray-100 text-sm">
               {filteredStaff.map(s => (
-                <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
-                  <td className="px-4 py-3.5 font-medium text-gray-900">{s.name}</td>
-                  <td className="px-4 py-3.5 text-gray-600">{s.role || '-'}</td>
-                  <td className="px-4 py-3.5 text-muted">{s.phone || '-'}</td>
-                  <td className="px-4 py-3.5">{s.salary_type}</td>
-                  <td className="px-4 py-3.5 font-medium text-gray-900">{formatCurrency(s.salary_amount)}</td>
-                  <td className="px-4 py-3.5 text-right">
-                    <button onClick={() => handleEdit(s)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Edit"><Edit2 size={16} /></button>
-                    <button onClick={() => {
+                <tr key={s.id} className="hover:bg-blue-50/30 transition-colors group">
+                  <td className="px-6 py-4 font-semibold text-gray-900 whitespace-nowrap">{s.name}</td>
+                  <td className="px-6 py-4 text-gray-600 whitespace-nowrap">{s.role || '-'}</td>
+                  <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{s.phone || '-'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200/60">
+                      {s.salary_type || 'Monthly'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 font-semibold text-gray-900 text-right whitespace-nowrap">
+                    {formatCurrency(s.salary_amount)}
+                  </td>
+                  <td className="px-6 py-4 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => handleEdit(s)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        title="Edit Teacher"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
                           setEntityToDelete({ id: s.id, name: s.name });
                           setDeleteModalOpen(true);
-                        }} className="p-1 text-gray-400 hover:text-red-600 ml-2 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                        }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Delete Teacher"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
