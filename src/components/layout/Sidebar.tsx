@@ -185,17 +185,17 @@ export const Sidebar: React.FC = () => {
         </div>
 
         {/* People & Programmes */}
-        {(modules.students || modules.classes || modules.teachers) && (
+        {(modules.teachers || modules.classes || modules.students) && (
           <div style={{ marginBottom: '1rem' }}>
             <SectionLabel>Manage</SectionLabel>
-            {modules.students && (
-              <NavItem to="/students" icon={<Users size={20} />} label={t('students')} />
+            {modules.teachers && (
+              <NavItem to="/teachers" icon={<GraduationCap size={20} />} label={t('teachers')} />
             )}
             {modules.classes && (
               <NavItem to="/classes" icon={<BookOpen size={20} />} label={t('classes')} />
             )}
-            {modules.teachers && (
-              <NavItem to="/teachers" icon={<GraduationCap size={20} />} label={t('teachers')} />
+            {modules.students && (
+              <NavItem to="/students" icon={<Users size={20} />} label={t('students')} />
             )}
           </div>
         )}
