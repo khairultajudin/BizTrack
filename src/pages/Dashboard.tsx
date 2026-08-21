@@ -123,15 +123,15 @@ export const Dashboard: React.FC = () => {
       students, classes, staff,
       recentPay, recentExp,
     ] = await Promise.all([
-      supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Paid').is('deleted_at', null),
-      supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Pending').is('deleted_at', null),
-      supabase.from('expenses').select('amount').eq('business_id', businessId).gte('date', firstDay).lte('date', lastDay).is('deleted_at', null),
-      supabase.from('staff_payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).is('deleted_at', null),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active').is('deleted_at', null),
-      supabase.from('groups').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active').is('deleted_at', null),
-      supabase.from('staff').select('*', { count: 'exact', head: true }).eq('business_id', businessId).is('deleted_at', null),
-      supabase.from('payments').select('*, customers(name)').eq('business_id', businessId).is('deleted_at', null).order('payment_date', { ascending: false }).limit(5),
-      supabase.from('expenses').select('*').eq('business_id', businessId).is('deleted_at', null).order('date', { ascending: false }).limit(5),
+      supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Paid'),
+      supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Pending'),
+      supabase.from('expenses').select('amount').eq('business_id', businessId).gte('date', firstDay).lte('date', lastDay),
+      supabase.from('staff_payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active'),
+      supabase.from('groups').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active'),
+      supabase.from('staff').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
+      supabase.from('payments').select('*, customers(name)').eq('business_id', businessId).order('payment_date', { ascending: false }).limit(5),
+      supabase.from('expenses').select('*').eq('business_id', businessId).order('date', { ascending: false }).limit(5),
     ]);
 
     const collection = (paidPayments.data || []).reduce((a, c) => a + Number(c.amount), 0);
@@ -156,9 +156,9 @@ export const Dashboard: React.FC = () => {
     const trendResults = await Promise.all(
       months.map(async (m) => {
         const [inc, excost, staffcost] = await Promise.all([
-          supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year).eq('status', 'Paid').is('deleted_at', null),
-          supabase.from('expenses').select('amount').eq('business_id', businessId).gte('date', m.firstDay).lte('date', m.lastDay).is('deleted_at', null),
-          supabase.from('staff_payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year).is('deleted_at', null),
+          supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year).eq('status', 'Paid'),
+          supabase.from('expenses').select('amount').eq('business_id', businessId).gte('date', m.firstDay).lte('date', m.lastDay),
+          supabase.from('staff_payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year),
         ]);
         const income = (inc.data || []).reduce((a, c) => a + Number(c.amount), 0);
         const exTotal = (excost.data || []).reduce((a, c) => a + Number(c.amount), 0) +

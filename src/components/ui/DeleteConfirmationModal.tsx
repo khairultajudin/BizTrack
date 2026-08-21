@@ -35,17 +35,17 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
 
     try {
       if (entityType === 'student') {
-        const { count } = await supabase.from('payments').select('*', { count: 'exact', head: true }).eq('customer_id', entityId).is('deleted_at', null);
-        if (count && count > 0) impacts.push(`This will hide ${count} payment records associated with this student.`);
+        const { count } = await supabase.from('payments').select('*', { count: 'exact', head: true }).eq('customer_id', entityId);
+        if (count && count > 0) impacts.push(`This will delete ${count} payment records associated with this student.`);
       }
 
       if (entityType === 'class') {
-        const { count } = await supabase.from('customers').select('*', { count: 'exact', head: true }).eq('assigned_group_id', entityId).is('deleted_at', null);
+        const { count } = await supabase.from('customers').select('*', { count: 'exact', head: true }).eq('assigned_group_id', entityId);
         if (count && count > 0) impacts.push(`This will unassign ${count} active students from this class.`);
       }
 
       if (entityType === 'teacher') {
-        const { count } = await supabase.from('groups').select('*', { count: 'exact', head: true }).eq('teacher_id', entityId).is('deleted_at', null);
+        const { count } = await supabase.from('groups').select('*', { count: 'exact', head: true }).eq('teacher_id', entityId);
         if (count && count > 0) impacts.push(`This will unassign the teacher from ${count} active classes.`);
       }
 

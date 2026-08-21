@@ -20,12 +20,8 @@ export abstract class BaseRepository<T> {
   /**
    * Internal helper to apply common RLS and soft-delete filters
    */
-  protected baseQuery(options: RepositoryOptions, includeDeleted = false) {
-    let query = supabase.from(this.tableName).select('*').eq('business_id', options.businessId);
-    if (!includeDeleted) {
-      query = query.is('deleted_at', null);
-    }
-    return query;
+  protected baseQuery(options: RepositoryOptions, _includeDeleted = false) {
+    return supabase.from(this.tableName).select('*').eq('business_id', options.businessId);
   }
 
   async findById(id: string, options: RepositoryOptions): Promise<T | null> {
@@ -59,7 +55,6 @@ export abstract class BaseRepository<T> {
         .from(this.tableName)
         .select('*', { count: 'exact' })
         .eq('business_id', options.businessId)
-        .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -101,33 +96,23 @@ export abstract class BaseRepository<T> {
     }
   }
 
-  async softDelete(id: string, userId: string, options: RepositoryOptions): Promise<void> {
+  async softDelete(id: string, _userId: string, options: RepositoryOptions): Promise<void> {
     try {
       const { error } = await supabase
         .from(this.tableName)
-        .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
+        .delete()
         .eq('id', id)
         .eq('business_id', options.businessId);
         
       if (error) throw error;
     } catch (error: any) {
-      LoggerService.error(`Repository softDelete failed for ${this.tableName}`, error);
+      LoggerService.error(`Repository delete failed for ${this.tableName}`, error);
       throw error;
     }
   }
 
-  async restore(id: string, options: RepositoryOptions): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from(this.tableName)
-        .update({ deleted_at: null, deleted_by: null })
-        .eq('id', id)
-        .eq('business_id', options.businessId);
-        
-      if (error) throw error;
-    } catch (error: any) {
-      LoggerService.error(`Repository restore failed for ${this.tableName}`, error);
-      throw error;
-    }
+  async restore(_id: string, _options: RepositoryOptions): Promise<void> {
+    // No-op since deleted_at column is not present in live production schema
+    return Promise.resolve();
   }
 }

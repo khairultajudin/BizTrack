@@ -40,7 +40,6 @@ export const Teachers: React.FC = () => {
       .from('staff')
       .select('*')
       .eq('business_id', businessId)
-      .is('deleted_at', null)
       .order('created_at', { ascending: false });
       
     if (error) console.error(error);
@@ -131,7 +130,7 @@ export const Teachers: React.FC = () => {
   const handleDeleteConfirm = async () => {
     if (!businessId || !entityToDelete) return;
     const { error } = await supabase.from('staff')
-      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .delete()
       .eq('id', entityToDelete.id)
       .eq('business_id', businessId);
       

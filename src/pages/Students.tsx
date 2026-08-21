@@ -40,8 +40,8 @@ export const Students: React.FC = () => {
   const fetchData = useCallback(async () => {
     if (!businessId) return;
     const [customersRes, groupsRes] = await Promise.all([
-      supabase.from('customers').select('*, groups(name)').eq('business_id', businessId).is('deleted_at', null).order('created_at', { ascending: false }),
-      supabase.from('groups').select('id, name').eq('business_id', businessId).is('deleted_at', null)
+      supabase.from('customers').select('*, groups(name)').eq('business_id', businessId).order('created_at', { ascending: false }),
+      supabase.from('groups').select('id, name').eq('business_id', businessId)
     ]);
     
     if (customersRes.data) setCustomers(customersRes.data);
@@ -105,7 +105,7 @@ export const Students: React.FC = () => {
           code: saveError.code,
           fullError: saveError
         });
-        setFormError(saveError.message || 'Unable to save student. Please check your input and try again.');
+        setFormError(saveError.message || 'Unable to save student record. Please check your input.');
         setSubmitting(false);
         return; // DO NOT close modal on error
       }
@@ -137,7 +137,7 @@ export const Students: React.FC = () => {
   const handleDeleteConfirm = async () => {
     if (!businessId || !entityToDelete) return;
     const { error } = await supabase.from('customers')
-      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .delete()
       .eq('id', entityToDelete.id)
       .eq('business_id', businessId);
       

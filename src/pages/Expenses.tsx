@@ -44,7 +44,6 @@ export const Expenses: React.FC = () => {
       .from('expenses')
       .select('*')
       .eq('business_id', businessId)
-      .is('deleted_at', null)
       .order('date', { ascending: false });
       
     if (data) setExpenses(data);
@@ -136,7 +135,7 @@ export const Expenses: React.FC = () => {
   const handleDeleteConfirm = async () => {
     if (!businessId || !entityToDelete) return;
     const { error } = await supabase.from('expenses')
-      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .delete()
       .eq('id', entityToDelete.id)
       .eq('business_id', businessId);
       

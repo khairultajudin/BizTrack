@@ -48,14 +48,14 @@ export const Reports: React.FC = () => {
     const yearToFetch = activeFilters.year || currentYear;
     
     // Fetch Payments
-    let payQuery = supabase.from('payments').select('amount, month, status, customers(assigned_group_id, groups(teacher_id))').eq('business_id', businessId).eq('year', yearToFetch).is('deleted_at', null);
+    let payQuery = supabase.from('payments').select('amount, month, status, customers(assigned_group_id, groups(teacher_id))').eq('business_id', businessId).eq('year', yearToFetch);
     
     if (activeFilters.month) payQuery = payQuery.eq('month', activeFilters.month);
     if (activeFilters.payment_status) payQuery = payQuery.eq('status', activeFilters.payment_status);
     else payQuery = payQuery.eq('status', 'Paid'); // Default if no filter
     
     // Fetch Expenses
-    let expQuery = supabase.from('expenses').select('amount, date').eq('business_id', businessId).gte('date', `${yearToFetch}-01-01`).lte('date', `${yearToFetch}-12-31`).is('deleted_at', null);
+    let expQuery = supabase.from('expenses').select('amount, date').eq('business_id', businessId).gte('date', `${yearToFetch}-01-01`).lte('date', `${yearToFetch}-12-31`);
     
     const [payRes, expRes] = await Promise.all([payQuery, expQuery]);
     

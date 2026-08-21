@@ -12,8 +12,8 @@ export class AnalyticsService {
    * Retrieves high-level trend data for the given year/filters.
    */
   static async getFinancialTrends(businessId: string, filters: AnalyticsFilters) {
-    let payQuery = supabase.from('payments').select('amount, month, status').eq('business_id', businessId).eq('year', filters.year).is('deleted_at', null);
-    let expQuery = supabase.from('expenses').select('amount, date').eq('business_id', businessId).gte('date', `${filters.year}-01-01`).lte('date', `${filters.year}-12-31`).is('deleted_at', null);
+    let payQuery = supabase.from('payments').select('amount, month, status').eq('business_id', businessId).eq('year', filters.year);
+    let expQuery = supabase.from('expenses').select('amount, date').eq('business_id', businessId).gte('date', `${filters.year}-01-01`).lte('date', `${filters.year}-12-31`);
     
     if (filters.month) payQuery = payQuery.eq('month', filters.month);
 
@@ -69,8 +69,7 @@ export class AnalyticsService {
       .select('payment_method, amount')
       .eq('business_id', businessId)
       .eq('year', filters.year)
-      .eq('status', 'Paid')
-      .is('deleted_at', null);
+      .eq('status', 'Paid');
       
     if (!data) return [];
     

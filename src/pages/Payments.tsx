@@ -47,8 +47,8 @@ export const Payments: React.FC = () => {
   const fetchData = useCallback(async () => {
     if (!businessId) return;
     const [payRes, custRes] = await Promise.all([
-      supabase.from('payments').select('*, customers(name)').eq('business_id', businessId).is('deleted_at', null).order('payment_date', { ascending: false }),
-      supabase.from('customers').select('id, name').eq('business_id', businessId).is('deleted_at', null)
+      supabase.from('payments').select('*, customers(name)').eq('business_id', businessId).order('payment_date', { ascending: false }),
+      supabase.from('customers').select('id, name').eq('business_id', businessId)
     ]);
     
     if (payRes.data) setPayments(payRes.data);
@@ -147,7 +147,7 @@ export const Payments: React.FC = () => {
   const handleDeleteConfirm = async () => {
     if (!businessId || !entityToDelete) return;
     const { error } = await supabase.from('payments')
-      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .delete()
       .eq('id', entityToDelete.id)
       .eq('business_id', businessId);
       
