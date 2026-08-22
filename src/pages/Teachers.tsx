@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
-import { Plus, Edit2, Trash2, GraduationCap, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, AlertCircle, Search } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
 
@@ -160,9 +160,9 @@ export const Teachers: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <header className="page-header">
         <div>
-          <h1 className="text-2xl font-bold">{t('teachers')}</h1>
+          <h1>{t('teachers')}</h1>
           <p className="text-muted">Manage your staff and instructors.</p>
         </div>
         <button onClick={openNewModal} className="btn btn-primary">
@@ -172,18 +172,17 @@ export const Teachers: React.FC = () => {
 
       {/* Toolbar: Search */}
       {staff.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-          <div className="relative w-full sm:w-72">
+        <div className="management-toolbar">
+          <div className="search-input-wrapper">
+            <span className="search-icon">
+              <Search size={16} />
+            </span>
             <input
               type="text"
               placeholder="Search teachers..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="input w-full pl-9 pr-4 text-sm"
             />
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
           </div>
         </div>
       )}
@@ -203,16 +202,16 @@ export const Teachers: React.FC = () => {
           actionLabel="Add Teacher"
           onAction={openNewModal}
         >
-          <div className="bg-blue-50/80 border border-blue-100 rounded-lg p-3 text-left text-xs text-blue-900 flex flex-col gap-1.5">
-            <span className="font-semibold text-blue-800">💡 Recommended Setup Sequence:</span>
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-blue-700">
-              <span className="font-medium bg-white px-2 py-0.5 rounded border border-blue-300 text-blue-900">1. Add Teachers</span>
+          <div className="guide-box">
+            <span style={{ fontWeight: 600 }}>💡 Recommended Setup Sequence:</span>
+            <div className="guide-steps-flow">
+              <span className="guide-step highlight">1. Add Teachers</span>
               <span>➔</span>
-              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">2. Create Classes (e.g. Year 2)</span>
+              <span className="guide-step">2. Create Classes</span>
               <span>➔</span>
-              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">3. Add Students</span>
+              <span className="guide-step">3. Add Students</span>
               <span>➔</span>
-              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">4. Payments</span>
+              <span className="guide-step">4. Payments</span>
             </div>
           </div>
         </EmptyState>
@@ -222,37 +221,37 @@ export const Teachers: React.FC = () => {
           <p className="text-sm text-muted mt-1">Try adjusting your search query.</p>
         </div>
       ) : (
-        <div className="card overflow-x-auto p-0 border border-gray-200 shadow-sm rounded-xl">
-          <table className="w-full text-left border-collapse">
+        <div className="card-table">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50/70">
-                <th className="px-6 py-3.5 font-semibold">Name</th>
-                <th className="px-6 py-3.5 font-semibold">Role</th>
-                <th className="px-6 py-3.5 font-semibold">Phone</th>
-                <th className="px-6 py-3.5 font-semibold">Salary Type</th>
-                <th className="px-6 py-3.5 font-semibold text-right">Amount</th>
-                <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
+              <tr>
+                <th>Teacher</th>
+                <th>Role</th>
+                <th>Phone</th>
+                <th>Salary Type</th>
+                <th className="text-right">Monthly Amount</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
+            <tbody>
               {filteredStaff.map(s => (
-                <tr key={s.id} className="hover:bg-blue-50/30 transition-colors group">
-                  <td className="px-6 py-4 font-semibold text-gray-900 whitespace-nowrap">{s.name}</td>
-                  <td className="px-6 py-4 text-gray-600 whitespace-nowrap">{s.role || '-'}</td>
-                  <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{s.phone || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200/60">
+                <tr key={s.id}>
+                  <td className="primary-text">{s.name}</td>
+                  <td>{s.role || <span className="text-muted">—</span>}</td>
+                  <td>{s.phone || <span className="text-muted">—</span>}</td>
+                  <td>
+                    <span className="badge badge-neutral">
                       {s.salary_type || 'Monthly'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 font-semibold text-gray-900 text-right whitespace-nowrap">
+                  <td className="text-right primary-text">
                     {formatCurrency(s.salary_amount)}
                   </td>
-                  <td className="px-6 py-4 text-right whitespace-nowrap">
-                    <div className="inline-flex items-center justify-end gap-1">
+                  <td className="text-right">
+                    <div className="action-buttons-group">
                       <button
                         onClick={() => handleEdit(s)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        className="action-btn edit"
                         title="Edit Teacher"
                       >
                         <Edit2 size={16} />
@@ -262,7 +261,7 @@ export const Teachers: React.FC = () => {
                           setEntityToDelete({ id: s.id, name: s.name });
                           setDeleteModalOpen(true);
                         }}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        className="action-btn delete"
                         title="Delete Teacher"
                       >
                         <Trash2 size={16} />

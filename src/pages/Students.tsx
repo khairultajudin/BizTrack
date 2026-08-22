@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
-import { Plus, Edit2, Trash2, Users, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, AlertCircle, Search } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
 
@@ -170,38 +170,38 @@ export const Students: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <header className="page-header">
         <div>
-          <h1 className="text-2xl font-bold">{t('students')}</h1>
-          <p className="text-muted">Manage your {t('students').toLowerCase()} directory.</p>
+          <h1>{t('students')}</h1>
+          <p className="text-muted">Manage your students and class assignments.</p>
         </div>
         <button onClick={openNewModal} className="btn btn-primary">
-          <Plus size={18} /> Add {t('students')}
+          <Plus size={18} /> Add Student
         </button>
       </header>
 
       {/* Toolbar: Search and Filter */}
       {customers.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-          <div className="relative w-full sm:w-72">
+        <div className="management-toolbar">
+          <div className="search-input-wrapper">
+            <span className="search-icon">
+              <Search size={16} />
+            </span>
             <input
               type="text"
-              placeholder={`Search ${t('students').toLowerCase()}...`}
+              placeholder="Search students..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="input w-full pl-9 pr-4 text-sm"
             />
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs text-muted font-medium whitespace-nowrap">Filter Status:</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted font-medium">Filter Status:</span>
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
               className="input text-sm py-1.5 bg-white cursor-pointer"
+              style={{ padding: '0.4rem 0.75rem' }}
             >
               <option value="All">All Statuses</option>
               <option value="Active">Active</option>
@@ -221,60 +221,89 @@ export const Students: React.FC = () => {
       ) : customers.length === 0 ? (
         <EmptyState 
           icon={Users} 
-          title={`No ${t('students').toLowerCase()} yet`} 
-          description={`Add your first ${t('students').toLowerCase()} to start recording monthly payments and organizing classes.`}
-          actionLabel={`Add ${t('students')}`}
+          title="No students yet" 
+          description="Add your first student to start recording monthly payments and organizing classes."
+          actionLabel="Add Student"
           onAction={openNewModal}
         >
-          <div className="bg-blue-50/80 border border-blue-100 rounded-lg p-3 text-left text-xs text-blue-900 flex flex-col gap-1.5">
-            <span className="font-semibold text-blue-800">💡 Recommended Setup Sequence:</span>
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-blue-700">
-              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">1. Add Teachers</span>
+          <div className="guide-box">
+            <span style={{ fontWeight: 600 }}>💡 Recommended Setup Sequence:</span>
+            <div className="guide-steps-flow">
+              <span className="guide-step">1. Add Teachers</span>
               <span>➔</span>
-              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">2. Create Classes (e.g. Year 2)</span>
+              <span className="guide-step">2. Create Classes</span>
               <span>➔</span>
-              <span className="font-medium bg-white px-2 py-0.5 rounded border border-blue-300 text-blue-900">3. Add Students</span>
+              <span className="guide-step highlight">3. Add Students</span>
               <span>➔</span>
-              <span className="bg-white px-2 py-0.5 rounded border border-blue-200">4. Payments</span>
+              <span className="guide-step">4. Payments</span>
             </div>
           </div>
         </EmptyState>
       ) : filteredCustomers.length === 0 ? (
         <div className="card p-8 text-center text-gray-500">
-          <p className="font-medium text-base text-gray-700">No matching {t('students').toLowerCase()} found</p>
+          <p className="font-medium text-base text-gray-700">No matching students found</p>
           <p className="text-sm text-muted mt-1">Try adjusting your search query or filter settings.</p>
         </div>
       ) : (
-        <div className="card overflow-x-auto p-0">
-          <table className="w-full text-left border-collapse">
+        <div className="card-table">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50/50">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Contact</th>
-                <th className="px-4 py-3 font-medium">{t('classes')}</th>
-                <th className="px-4 py-3 font-medium">Fee</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              <tr>
+                <th>Student</th>
+                <th>Contact</th>
+                <th>Class</th>
+                <th className="text-right">Monthly Fee</th>
+                <th>Status</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="text-sm">
+            <tbody>
               {filteredCustomers.map(c => (
-                <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
-                  <td className="px-4 py-3.5 font-medium text-gray-900">{c.name}</td>
-                  <td className="px-4 py-3.5 text-muted">{c.phone || '-'}{c.email ? <><br/>{c.email}</> : ''}</td>
-                  <td className="px-4 py-3.5">{c.groups?.name || '-'}</td>
-                  <td className="px-4 py-3.5 font-medium">{formatCurrency(c.monthly_fee)}</td>
-                  <td className="px-4 py-3.5">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${c.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
+                <tr key={c.id}>
+                  <td className="primary-text">{c.name}</td>
+                  <td>
+                    <div>
+                      <div>{c.phone || <span className="text-muted">—</span>}</div>
+                      {c.email && <div className="text-xs text-muted">{c.email}</div>}
+                    </div>
+                  </td>
+                  <td>
+                    {c.groups?.name ? (
+                      <span className="badge badge-blue">
+                        {c.groups.name}
+                      </span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
+                  <td className="text-right primary-text">
+                    {formatCurrency(c.monthly_fee)}
+                  </td>
+                  <td>
+                    <span className={`badge ${c.status === 'Active' ? 'badge-success' : 'badge-archived'}`}>
                       {c.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5 text-right">
-                    <button onClick={() => handleEdit(c)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Edit"><Edit2 size={16} /></button>
-                    <button onClick={() => {
+                  <td className="text-right">
+                    <div className="action-buttons-group">
+                      <button
+                        onClick={() => handleEdit(c)}
+                        className="action-btn edit"
+                        title="Edit Student"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
                           setEntityToDelete({ id: c.id, name: c.name });
                           setDeleteModalOpen(true);
-                        }} className="p-1 text-gray-400 hover:text-red-600 ml-2 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                        }}
+                        className="action-btn delete"
+                        title="Delete Student"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

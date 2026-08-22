@@ -1,6 +1,6 @@
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Button } from './Button';
+import { Plus } from 'lucide-react';
 
 interface EmptyStateProps {
   icon: LucideIcon;
@@ -20,24 +20,25 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   children
 }) => {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-xl border border-gray-100 border-dashed">
-      <div className="bg-blue-50 p-3 rounded-full mb-4">
-        <Icon className="w-8 h-8 text-blue-500" />
+    <div className="empty-state-card">
+      <div className="empty-state-icon-wrapper">
+        <Icon size={32} />
       </div>
-      <h3 className="text-lg font-medium text-gray-900 mb-1">{title}</h3>
-      <p className="text-sm text-gray-500 mb-6 max-w-sm">{description}</p>
+      <h3>{title}</h3>
+      <p>{description}</p>
       
       {actionLabel && onAction && (
-        <Button onClick={onAction}>
-          {actionLabel}
-        </Button>
+        <button onClick={onAction} className="btn btn-primary">
+          <Plus size={16} /> {actionLabel}
+        </button>
       )}
 
       {children && (
-        <div className="mt-6 w-full max-w-md">
+        <div className="empty-state-children">
           {children}
         </div>
       )}
     </div>
   );
 };
+
