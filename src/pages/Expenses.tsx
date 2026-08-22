@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
-import { Plus, Edit2, Trash2, Receipt, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Receipt, AlertCircle, Search, Loader2 } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
 
@@ -183,26 +183,26 @@ export const Expenses: React.FC = () => {
 
       {/* Toolbar: Search and Category Filter */}
       {expenses.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
-          <div className="relative w-full sm:w-72">
+        <div className="management-toolbar">
+          <div className="search-input-wrapper">
+            <span className="search-icon">
+              <Search size={16} />
+            </span>
             <input
               type="text"
               placeholder="Search expenses..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="input w-full pl-9 pr-4 text-sm"
             />
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs text-muted font-medium whitespace-nowrap">Filter Category:</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted font-medium">Filter Category:</span>
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
               className="input text-sm py-1.5 bg-white cursor-pointer"
+              style={{ padding: '0.4rem 0.75rem' }}
             >
               <option value="All">All Categories</option>
               {categories.map(c => (
@@ -214,11 +214,9 @@ export const Expenses: React.FC = () => {
       )}
 
       {loading ? (
-        <div className="card p-12 text-center text-gray-500 flex justify-center items-center">
-          <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
+        <div className="loading-state-card">
+          <Loader2 size={28} className="loading-spinner" />
+          <span>Loading expenses...</span>
         </div>
       ) : expenses.length === 0 ? (
         <EmptyState 
