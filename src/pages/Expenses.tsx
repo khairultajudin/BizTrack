@@ -171,9 +171,9 @@ export const Expenses: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <header className="page-header">
         <div>
-          <h1 className="text-2xl font-bold">{t('expenses')}</h1>
+          <h1>{t('expenses')}</h1>
           <p className="text-muted">Track outgoing operational costs.</p>
         </div>
         <button onClick={openNewModal} className="btn btn-primary">
@@ -227,39 +227,49 @@ export const Expenses: React.FC = () => {
           onAction={openNewModal}
         />
       ) : filteredExpenses.length === 0 ? (
-        <div className="card p-8 text-center text-gray-500">
-          <p className="font-medium text-base text-gray-700">No matching expenses found</p>
-          <p className="text-sm text-muted mt-1">Try adjusting your search query or category filter.</p>
+        <div className="card text-center text-muted" style={{ padding: '3rem 1.5rem' }}>
+          <p className="font-medium text-base" style={{ color: 'var(--text-primary)' }}>No matching expenses found</p>
+          <p className="text-sm text-muted" style={{ marginTop: '0.25rem' }}>Try adjusting your search query or category filter.</p>
         </div>
       ) : (
-        <div className="card overflow-x-auto p-0">
-          <table className="w-full text-left border-collapse">
+        <div className="card-table">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50/50">
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Category</th>
-                <th className="px-4 py-3 font-medium">Description</th>
-                <th className="px-4 py-3 font-medium">Amount</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              <tr>
+                <th>Date</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th style={{ textAlign: 'right' }}>Amount</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
-            <tbody className="text-sm">
+            <tbody>
               {filteredExpenses.map(e => (
-                <tr key={e.id} className="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
-                  <td className="px-4 py-3.5 font-medium text-gray-900">{e.date}</td>
-                  <td className="px-4 py-3.5">
-                    <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-gray-100 text-gray-700">
-                      {e.category}
-                    </span>
+                <tr key={e.id}>
+                  <td className="text-secondary font-medium">{e.date}</td>
+                  <td>
+                    <span className="badge badge-neutral">{e.category}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-muted">{e.description || '-'}</td>
-                  <td className="px-4 py-3.5 font-semibold text-red-600">−{formatCurrency(e.amount)}</td>
-                  <td className="px-4 py-3.5 text-right">
-                    <button onClick={() => handleEdit(e)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Edit"><Edit2 size={16} /></button>
-                    <button onClick={() => {
-                      setEntityToDelete({ id: e.id, name: `Expense for ${e.category}` });
-                      setDeleteModalOpen(true);
-                    }} className="p-1 text-gray-400 hover:text-red-600 ml-2 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                  <td className="font-medium">{e.description || '—'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--danger)' }}>
+                    −{formatCurrency(e.amount)}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <div className="action-buttons-group">
+                      <button onClick={() => handleEdit(e)} className="action-btn edit" title="Edit expense">
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setEntityToDelete({ id: e.id, name: `Expense for ${e.category}` });
+                          setDeleteModalOpen(true);
+                        }} 
+                        className="action-btn delete" 
+                        title="Delete expense"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

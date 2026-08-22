@@ -184,9 +184,9 @@ export const Payments: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <header className="page-header">
         <div>
-          <h1 className="text-2xl font-bold">{t('payments')}</h1>
+          <h1>{t('payments')}</h1>
           <p className="text-muted">Track incoming collections from your {t('students').toLowerCase()}.</p>
         </div>
         <button onClick={openNewModal} className="btn btn-primary">
@@ -240,48 +240,60 @@ export const Payments: React.FC = () => {
           onAction={openNewModal}
         />
       ) : filteredPayments.length === 0 ? (
-        <div className="card p-8 text-center text-gray-500">
-          <p className="font-medium text-base text-gray-700">No matching payments found</p>
-          <p className="text-sm text-muted mt-1">Try adjusting your search query or filter settings.</p>
+        <div className="card text-center text-muted" style={{ padding: '3rem 1.5rem' }}>
+          <p className="font-medium text-base" style={{ color: 'var(--text-primary)' }}>No matching payments found</p>
+          <p className="text-sm text-muted" style={{ marginTop: '0.25rem' }}>Try adjusting your search query or filter settings.</p>
         </div>
       ) : (
-        <div className="card overflow-x-auto p-0">
-          <table className="w-full text-left border-collapse">
+        <div className="card-table">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50/50">
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">{t('students')}</th>
-                <th className="px-4 py-3 font-medium">For Period</th>
-                <th className="px-4 py-3 font-medium">Method</th>
-                <th className="px-4 py-3 font-medium">Amount</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              <tr>
+                <th>Date</th>
+                <th>Student</th>
+                <th>For Period</th>
+                <th>Method</th>
+                <th style={{ textAlign: 'right' }}>Amount</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
-            <tbody className="text-sm">
+            <tbody>
               {filteredPayments.map(p => (
-                <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
-                  <td className="px-4 py-3.5 font-medium text-gray-900">{p.payment_date}</td>
-                  <td className="px-4 py-3.5">{p.customers?.name || '-'}</td>
-                  <td className="px-4 py-3.5">{p.month} {p.year}</td>
-                  <td className="px-4 py-3.5 text-muted">{p.payment_method}</td>
-                  <td className="px-4 py-3.5 font-semibold text-gray-900">{formatCurrency(p.amount)}</td>
-                  <td className="px-4 py-3.5">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${p.status === 'Paid' ? 'bg-green-100 text-green-800' : p.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                <tr key={p.id}>
+                  <td className="text-secondary font-medium">{p.payment_date}</td>
+                  <td className="font-semibold">{p.customers?.name || '—'}</td>
+                  <td>
+                    <span className="badge badge-neutral">{p.month} {p.year}</span>
+                  </td>
+                  <td className="text-secondary">{p.payment_method || '—'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {formatCurrency(p.amount)}
+                  </td>
+                  <td>
+                    <span className={`badge ${
+                      p.status === 'Paid' ? 'badge-success' : 
+                      p.status === 'Pending' ? 'badge-neutral' : 'badge-archived'
+                    }`}>
                       {p.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5 text-right">
-                    <button onClick={() => handleEdit(p)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Edit"><Edit2 size={16} /></button>
-                    <button 
-                      onClick={() => {
-                        setEntityToDelete({ id: p.id, name: `Payment for ${p.customers?.name || 'Customer'}` });
-                        setDeleteModalOpen(true);
-                      }} 
-                      className="p-1 text-gray-400 hover:text-red-600 ml-2 transition-colors"
-                      title="Delete">
+                  <td style={{ textAlign: 'right' }}>
+                    <div className="action-buttons-group">
+                      <button onClick={() => handleEdit(p)} className="action-btn edit" title="Edit payment">
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setEntityToDelete({ id: p.id, name: `Payment for ${p.customers?.name || 'Customer'}` });
+                          setDeleteModalOpen(true);
+                        }} 
+                        className="action-btn delete"
+                        title="Delete payment"
+                      >
                         <Trash2 size={16} />
-                    </button>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
