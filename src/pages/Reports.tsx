@@ -224,25 +224,56 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="card h-96 p-6 mt-4">
-            <h2 className="text-lg font-semibold mb-6">Income vs Expenses Overview</h2>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={chartData}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} />
-                <Tooltip 
-                  cursor={{fill: '#F3F4F6'}}
-                  contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                />
-                <Legend iconType="circle" wrapperStyle={{paddingTop: '20px'}} />
-                <Bar dataKey="Income" fill="var(--primary)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Expenses" fill="#EF4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="card mt-4">
+            <h2 className="text-lg font-semibold mb-4">Income vs Expenses Overview</h2>
+            {chartData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted">
+                <DollarSign size={36} className="mb-2 opacity-30 text-gray-400" />
+                <p className="font-medium text-gray-600">No financial data available</p>
+                <p className="text-xs text-gray-400 mt-1">Try selecting a different financial year or clearing filters.</p>
+              </div>
+            ) : (
+              <div style={{ height: 320, width: '100%', minHeight: 320 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={chartData}
+                    margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#6B7280', fontSize: 12 }} 
+                      dy={8} 
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#6B7280', fontSize: 12 }} 
+                      tickFormatter={(v) => `RM${v}`}
+                      width={65}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#F3F4F6' }}
+                      formatter={(value: any) => [formatCurrency(Number(value) || 0), '']}
+                      contentStyle={{
+                        borderRadius: '8px', 
+                        border: '1px solid #E5E7EB', 
+                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        fontSize: '13px'
+                      }}
+                    />
+                    <Legend 
+                      iconType="circle" 
+                      wrapperStyle={{ paddingTop: '16px' }} 
+                    />
+                    <Bar dataKey="Income" fill="#3B82F6" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                    <Bar dataKey="Expenses" fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
         </>
       )}
