@@ -4,6 +4,8 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 // Import all pages
 import { Login } from './src/pages/Login';
+import { ForgotPassword } from './src/pages/ForgotPassword';
+import { ResetPassword } from './src/pages/ResetPassword';
 import { Dashboard } from './src/pages/Dashboard';
 import { Onboarding } from './src/pages/Onboarding';
 import { DataImports } from './src/pages/DataImports';
@@ -53,6 +55,8 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
 
 const routesToTest = [
   { name: 'Login', component: <Login /> },
+  { name: 'ForgotPassword', component: <ForgotPassword /> },
+  { name: 'ResetPassword', component: <ResetPassword /> },
   { name: 'Dashboard', component: <Dashboard /> },
   { name: 'Onboarding', component: <Onboarding /> },
   { name: 'DataImports', component: <DataImports /> },

@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { TemplateProvider, useTemplate } from './context/TemplateContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Login } from './pages/Login';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { Dashboard } from './pages/Dashboard';
 import { Onboarding } from './pages/Onboarding';
 import { DataImports } from './pages/DataImports';
@@ -54,6 +56,8 @@ function App() {
         <TemplateProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route 
               path="/onboarding" 
               element={

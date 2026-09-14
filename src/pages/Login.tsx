@@ -132,7 +132,18 @@ export const Login: React.FC = () => {
           </div>
           
           <div className="input-group">
-            <label className="input-label">Password</label>
+            <div className="flex items-center justify-between">
+              <label className="input-label">Password</label>
+              {!isSignUp && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline focus:outline-none"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
             <div className="relative">
               <Lock className="absolute left-3 top-2.5 text-gray-400" size={18} />
               <input
