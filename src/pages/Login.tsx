@@ -170,14 +170,30 @@ export const Login: React.FC = () => {
           {isSignUp ? (
             <>
               Already have an account?{' '}
-              <button onClick={() => setIsSignUp(false)} className="text-blue-600 font-medium hover:underline focus:outline-none">
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsSignUp(false);
+                  setError(null);
+                  setMessage(null);
+                }} 
+                className="text-blue-600 font-medium hover:underline focus:outline-none"
+              >
                 Sign in
               </button>
             </>
           ) : (
             <>
               Don't have an account?{' '}
-              <button onClick={() => setIsSignUp(true)} className="text-blue-600 font-medium hover:underline focus:outline-none">
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsSignUp(true);
+                  setError(null);
+                  setMessage(null);
+                }} 
+                className="text-blue-600 font-medium hover:underline focus:outline-none"
+              >
                 Sign up
               </button>
             </>
