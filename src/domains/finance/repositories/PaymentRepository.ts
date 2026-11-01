@@ -6,10 +6,11 @@ export interface PaymentEntity {
   amount: number;
   payment_date: string;
   month: string;
-  year: string;
+  year: string | number;
   payment_method: string;
   status: string;
-  reference_number: string;
+  reference_number?: string | null;
+  invoice_path?: string | null;
   business_id: string;
   created_at: string;
   deleted_at?: string;
