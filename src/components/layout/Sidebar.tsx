@@ -221,6 +221,7 @@ export const Sidebar: React.FC = () => {
           <div style={{ marginBottom: '1rem' }}>
             <SectionLabel>Administration</SectionLabel>
             <NavItem to="/settings" icon={<Settings size={20} />} label={t('settings')} />
+            <NavItem to="/branches" icon={<Building2 size={20} />} label="Branches" />
             <NavItem to="/analytics" icon={<PieChart size={20} />} label="Analytics" />
             <NavItem to="/data-imports" icon={<Database size={20} />} label="Data Imports" />
           </div>

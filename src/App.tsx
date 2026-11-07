@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { BranchProvider } from './context/BranchContext';
 import { TemplateProvider, useTemplate } from './context/TemplateContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Login } from './pages/Login';
@@ -11,6 +12,7 @@ import { Onboarding } from './pages/Onboarding';
 import { DataImports } from './pages/DataImports';
 import { Analytics } from './pages/Analytics';
 import { CreatorSettings } from './pages/CreatorSettings';
+import { Branches } from './pages/Branches';
 import { Students } from './pages/Students';
 import { Classes } from './pages/Classes';
 import { Teachers } from './pages/Teachers';
@@ -53,44 +55,47 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <TemplateProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route 
-              path="/onboarding" 
-              element={
-                <OnboardingRoute>
-                  <Onboarding />
-                </OnboardingRoute>
-              } 
-            />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/settings" element={<CreatorSettings />} />
-                      <Route path="/health" element={<SystemHealth />} />
-                      <Route path="/profile" element={<MyProfile />} />
-                      <Route path="/analytics" element={<Analytics />} />
-                      <Route path="/data-imports" element={<DataImports />} />
-                      <Route path="/students" element={<ModuleRoute moduleName="students"><Students /></ModuleRoute>} />
-                      <Route path="/classes" element={<ModuleRoute moduleName="classes"><Classes /></ModuleRoute>} />
-                      <Route path="/teachers" element={<ModuleRoute moduleName="teachers"><Teachers /></ModuleRoute>} />
-                      <Route path="/payments" element={<ModuleRoute moduleName="payments"><Payments /></ModuleRoute>} />
-                      <Route path="/expenses" element={<ModuleRoute moduleName="expenses"><Expenses /></ModuleRoute>} />
-                      <Route path="/reports" element={<ModuleRoute moduleName="reports"><Reports /></ModuleRoute>} />
-                    </Routes>
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </TemplateProvider>
+        <BranchProvider>
+          <TemplateProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route
+                path="/onboarding"
+                element={
+                  <OnboardingRoute>
+                    <Onboarding />
+                  </OnboardingRoute>
+                }
+              />
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/settings" element={<CreatorSettings />} />
+                        <Route path="/branches" element={<Branches />} />
+                        <Route path="/health" element={<SystemHealth />} />
+                        <Route path="/profile" element={<MyProfile />} />
+                        <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/data-imports" element={<DataImports />} />
+                        <Route path="/students" element={<ModuleRoute moduleName="students"><Students /></ModuleRoute>} />
+                        <Route path="/classes" element={<ModuleRoute moduleName="classes"><Classes /></ModuleRoute>} />
+                        <Route path="/teachers" element={<ModuleRoute moduleName="teachers"><Teachers /></ModuleRoute>} />
+                        <Route path="/payments" element={<ModuleRoute moduleName="payments"><Payments /></ModuleRoute>} />
+                        <Route path="/expenses" element={<ModuleRoute moduleName="expenses"><Expenses /></ModuleRoute>} />
+                        <Route path="/reports" element={<ModuleRoute moduleName="reports"><Reports /></ModuleRoute>} />
+                      </Routes>
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </TemplateProvider>
+        </BranchProvider>
       </AuthProvider>
     </BrowserRouter>
   );

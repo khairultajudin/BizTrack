@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTemplate } from '../context/TemplateContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
 import {
@@ -18,6 +19,7 @@ import {
   ExternalLink,
   RefreshCw,
   X,
+  Building2,
 } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
@@ -27,6 +29,7 @@ interface Payment {
   id: string;
   business_id?: string;
   customer_id: string;
+  branch_id?: string | null;
   month: string;
   year: number;
   amount: number;
@@ -35,12 +38,21 @@ interface Payment {
   status: string;
   reference_number?: string | null;
   invoice_path?: string | null;
-  customers?: { name: string };
+  customers?: { name: string; branch_id?: string | null };
+  branches?: { name: string } | null;
+}
+
+interface CustomerOption {
+  id: string;
+  name: string;
+  branch_id?: string | null;
+  branches?: { name: string } | { name: string }[] | null;
 }
 
 export const Payments: React.FC = () => {
   const { t } = useTemplate();
   const { businessId, role, loading: authLoading } = useAuth();
+  const { selectedBranchId, activeBranches, isMultiBranch, staffBranchId } = useBranch();
 
   // Fail-closed explicit allowlist: false when role is null, loading, or 'ReadOnly'
   const canManageInvoices =
@@ -50,7 +62,7 @@ export const Payments: React.FC = () => {
       role === 'Staff');
 
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -93,10 +105,10 @@ export const Payments: React.FC = () => {
     const [payRes, custRes] = await Promise.all([
       supabase
         .from('payments')
-        .select('*, customers(name)')
+        .select('*, customers(name, branch_id), branches(name)')
         .eq('business_id', businessId)
         .order('payment_date', { ascending: false }),
-      supabase.from('customers').select('id, name').eq('business_id', businessId),
+      supabase.from('customers').select('id, name, branch_id, branches(name)').eq('business_id', businessId),
     ]);
 
     if (payRes.data) setPayments(payRes.data);
@@ -107,6 +119,12 @@ export const Payments: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Filter customers by selected branch if active
+  const availableCustomers = useMemo(() => {
+    if (!selectedBranchId) return customers;
+    return customers.filter(c => !c.branch_id || c.branch_id === selectedBranchId);
+  }, [customers, selectedBranchId]);
 
   const resetInvoiceState = (existingPath: string | null = null) => {
     setCurrentInvoicePath(existingPath);
@@ -358,7 +376,10 @@ export const Payments: React.FC = () => {
 
     setSubmitting(true);
 
-    const payload = {
+    const student = customers.find(c => c.id === formData.customer_id);
+    const paymentBranchId = student?.branch_id || selectedBranchId || staffBranchId || (activeBranches.length > 0 ? activeBranches[0].id : null);
+
+    const payload: Record<string, any> = {
       customer_id: formData.customer_id,
       month: formData.month,
       year: Number(formData.year),
@@ -369,6 +390,12 @@ export const Payments: React.FC = () => {
       reference_number: formData.reference_number.trim() || null,
       business_id: businessId,
     };
+
+    // New payments inherit the student's branch_id
+    // Existing payments keep their historical branch_id (do NOT overwrite)
+    if (!editingId && paymentBranchId) {
+      payload.branch_id = paymentBranchId;
+    }
 
     try {
       let targetPaymentId = editingId;
@@ -498,9 +525,15 @@ export const Payments: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('All');
 
   const filteredPayments = payments.filter(p => {
+    // Branch filter
+    if (selectedBranchId && p.branch_id !== selectedBranchId) {
+      return false;
+    }
+
     const query = searchQuery.toLowerCase();
     const matchesSearch =
       (p.customers?.name && p.customers.name.toLowerCase().includes(query)) ||
+      (p.branches?.name && p.branches.name.toLowerCase().includes(query)) ||
       (p.reference_number && p.reference_number.toLowerCase().includes(query)) ||
       (p.month && p.month.toLowerCase().includes(query)) ||
       (p.payment_method && p.payment_method.toLowerCase().includes(query)) ||
@@ -512,8 +545,9 @@ export const Payments: React.FC = () => {
   const openNewModal = () => {
     if (!canManageInvoices) return;
     setFormError(null);
+    const candidateCustomers = availableCustomers.length > 0 ? availableCustomers : customers;
     setFormData({
-      customer_id: customers.length > 0 ? customers[0].id : '',
+      customer_id: candidateCustomers.length > 0 ? candidateCustomers[0].id : '',
       month: currentMonth,
       year: currentYear,
       amount: 0,
@@ -604,6 +638,7 @@ export const Payments: React.FC = () => {
               <tr>
                 <th>Payment Date</th>
                 <th>Student</th>
+                {isMultiBranch && <th>Branch</th>}
                 <th>Invoice No.</th>
                 <th>For Period</th>
                 <th>Method</th>
@@ -618,6 +653,14 @@ export const Payments: React.FC = () => {
                 <tr key={p.id}>
                   <td className="text-secondary font-medium">{p.payment_date}</td>
                   <td className="font-semibold">{p.customers?.name || '—'}</td>
+                  {isMultiBranch && (
+                    <td>
+                      <span className="badge badge-neutral flex items-center gap-1 w-fit">
+                        <Building2 size={12} className="text-gray-500" />
+                        {p.branches?.name || '—'}
+                      </span>
+                    </td>
+                  )}
                   <td className="text-secondary">
                     {p.reference_number ? (
                       <span className="font-medium text-gray-800">{p.reference_number}</span>
@@ -731,15 +774,18 @@ export const Payments: React.FC = () => {
               <option value="" disabled>
                 -- Select --
               </option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {availableCustomers.map(c => {
+                const bName = Array.isArray(c.branches) ? c.branches[0]?.name : c.branches?.name;
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {isMultiBranch && bName ? `(${bName})` : ''}
+                  </option>
+                );
+              })}
             </select>
-            {customers.length === 0 && (
+            {availableCustomers.length === 0 && (
               <p className="text-xs text-amber-600 mt-1">
-                No students found. Add a student first to record payments.
+                {selectedBranchId ? 'No students found in this branch.' : 'No students found. Add a student first to record payments.'}
               </p>
             )}
           </div>

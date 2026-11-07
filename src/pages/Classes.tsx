@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTemplate } from '../context/TemplateContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
-import { Plus, Edit2, Trash2, Users, BookOpen, AlertCircle, Search, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, BookOpen, AlertCircle, Search, Loader2, Building2 } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
 
@@ -12,16 +13,19 @@ interface Group {
   id: string;
   name: string;
   teacher_id: string | null;
+  branch_id?: string | null;
   monthly_fee: number;
   max_students: number;
   status: string;
   description: string;
   staff?: { name: string };
+  branches?: { name: string } | null;
 }
 
 export const Classes: React.FC = () => {
   const { t } = useTemplate();
-  const { businessId, user } = useAuth();
+  const { businessId } = useAuth();
+  const { selectedBranchId, activeBranches, isMultiBranch } = useBranch();
   
   const [groups, setGroups] = useState<Group[]>([]);
   const [teachers, setTeachers] = useState<{id: string, name: string}[]>([]);
@@ -34,17 +38,27 @@ export const Classes: React.FC = () => {
   const [entityToDelete, setEntityToDelete] = useState<{id: string, name: string} | null>(null);
   
   const [formData, setFormData] = useState({
-    name: '', teacher_id: '', monthly_fee: 0, max_students: 20, status: 'Active', description: ''
+    name: '',
+    branch_id: '',
+    teacher_id: '',
+    monthly_fee: 0,
+    max_students: 20,
+    status: 'Active',
+    description: '',
   });
 
   const fetchData = useCallback(async () => {
     if (!businessId) return;
     const [groupsRes, teachersRes] = await Promise.all([
-      supabase.from('groups').select('*, staff(name)').eq('business_id', businessId).order('created_at', { ascending: false }),
+      supabase
+        .from('groups')
+        .select('*, staff(name), branches(name)')
+        .eq('business_id', businessId)
+        .order('created_at', { ascending: false }),
       supabase.from('staff').select('id, name').eq('business_id', businessId)
     ]);
     
-    if (groupsRes.data) setGroups(groupsRes.data);
+    if (groupsRes.data) setGroups(groupsRes.data as Group[]);
     if (teachersRes.data) setTeachers(teachersRes.data);
     setLoading(false);
   }, [businessId]);
@@ -68,17 +82,26 @@ export const Classes: React.FC = () => {
       return;
     }
 
+    if (isMultiBranch && !formData.branch_id) {
+      setFormError('Please select a branch for this class.');
+      return;
+    }
+
     setSubmitting(true);
 
-    const payload = {
+    const payload: Record<string, any> = {
       name: nameTrimmed,
       teacher_id: formData.teacher_id || null,
       monthly_fee: isNaN(Number(formData.monthly_fee)) ? 0 : Number(formData.monthly_fee),
       max_students: isNaN(Number(formData.max_students)) ? 20 : Number(formData.max_students),
       status: formData.status || 'Active',
       description: formData.description.trim() || null,
-      business_id: businessId
+      business_id: businessId,
     };
+
+    if (isMultiBranch) {
+      payload.branch_id = formData.branch_id;
+    }
 
     try {
       let saveError: any = null;
@@ -123,12 +146,13 @@ export const Classes: React.FC = () => {
   const handleEdit = (group: Group) => {
     setFormError(null);
     setFormData({
-      name: group.name, 
-      teacher_id: group.teacher_id || '', 
-      monthly_fee: group.monthly_fee || 0, 
+      name: group.name,
+      branch_id: group.branch_id || activeBranches[0]?.id || '',
+      teacher_id: group.teacher_id || '',
+      monthly_fee: group.monthly_fee || 0,
       max_students: group.max_students || 20,
       status: group.status || 'Active',
-      description: group.description || ''
+      description: group.description || '',
     });
     setEditingId(group.id);
     setIsModalOpen(true);
@@ -150,18 +174,30 @@ export const Classes: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const filteredGroups = groups.filter(g => {
-    const matchesSearch = 
-      g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (g.staff?.name && g.staff.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (g.description && g.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesStatus = statusFilter === 'All' || g.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredGroups = useMemo(() => {
+    return groups.filter(g => {
+      const matchesBranch = !selectedBranchId || g.branch_id === selectedBranchId;
+      const matchesSearch =
+        g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (g.staff?.name && g.staff.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (g.branches?.name && g.branches.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (g.description && g.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesStatus = statusFilter === 'All' || g.status === statusFilter;
+      return matchesBranch && matchesSearch && matchesStatus;
+    });
+  }, [groups, selectedBranchId, searchQuery, statusFilter]);
 
   const openNewModal = () => {
     setFormError(null);
-    setFormData({ name: '', teacher_id: '', monthly_fee: 0, max_students: 20, status: 'Active', description: '' });
+    setFormData({
+      name: '',
+      branch_id: selectedBranchId || activeBranches[0]?.id || '',
+      teacher_id: '',
+      monthly_fee: 0,
+      max_students: 20,
+      status: 'Active',
+      description: '',
+    });
     setEditingId(null);
     setIsModalOpen(true);
   };
@@ -246,6 +282,7 @@ export const Classes: React.FC = () => {
             <thead>
               <tr>
                 <th>Class</th>
+                {isMultiBranch && <th>Branch</th>}
                 <th>Teacher</th>
                 <th className="text-right">Monthly Fee</th>
                 <th>Capacity</th>
@@ -257,6 +294,14 @@ export const Classes: React.FC = () => {
               {filteredGroups.map(g => (
                 <tr key={g.id}>
                   <td className="primary-text">{g.name}</td>
+                  {isMultiBranch && (
+                    <td>
+                      <span className="badge badge-blue flex items-center gap-1" style={{ display: 'inline-flex' }}>
+                        <Building2 size={12} />
+                        {g.branches?.name || 'Default'}
+                      </span>
+                    </td>
+                  )}
                   <td>{g.staff?.name || <span className="text-muted">—</span>}</td>
                   <td className="text-right primary-text">{formatCurrency(g.monthly_fee)}</td>
                   <td>
@@ -308,6 +353,28 @@ export const Classes: React.FC = () => {
                 <p className="font-semibold text-red-800">Unable to save class</p>
                 <p className="text-xs text-red-600 mt-0.5">{formError}</p>
               </div>
+            </div>
+          )}
+
+          {isMultiBranch && (
+            <div className="input-group">
+              <label className="input-label">Branch *</label>
+              <select
+                required
+                className="input bg-white text-base sm:text-sm"
+                value={formData.branch_id}
+                onChange={e => {
+                  setFormError(null);
+                  setFormData({ ...formData, branch_id: e.target.value });
+                }}
+              >
+                <option value="">-- Select Branch --</option>
+                {activeBranches.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 

@@ -3,8 +3,9 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import {
-  LogOut, User as UserIcon, Settings, HelpCircle, ChevronDown
+  LogOut, User as UserIcon, Settings, HelpCircle, ChevronDown, Building2
 } from 'lucide-react';
+import { BranchSelector } from './BranchSelector';
 
 export const Topbar: React.FC = () => {
   const { displayName, initials, businessName, role } = useAuth();
@@ -47,6 +48,11 @@ export const Topbar: React.FC = () => {
             {businessName}
           </p>
         )}
+      </div>
+
+      {/* Middle: Global Branch Selector */}
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <BranchSelector />
       </div>
 
       {/* Right: user menu */}
@@ -96,6 +102,13 @@ export const Topbar: React.FC = () => {
               label="Business Settings"
               onClick={() => { setMenuOpen(false); navigate('/settings'); }}
             />
+            {(role === 'Creator' || role === 'Admin') && (
+              <DropdownItem
+                icon={<Building2 size={15} />}
+                label="Branch Management"
+                onClick={() => { setMenuOpen(false); navigate('/branches'); }}
+              />
+            )}
             <DropdownItem
               icon={<HelpCircle size={15} />}
               label="Help & Support"

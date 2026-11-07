@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTemplate } from '../context/TemplateContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import { Modal } from '../components/ui/Modal';
 import { DeleteConfirmationModal } from '../components/ui/DeleteConfirmationModal';
 import {
@@ -14,6 +15,8 @@ import {
   Loader2,
   FileText,
   ExternalLink,
+  Building2,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { EmptyState } from '../core/ui/EmptyState';
 import { formatCurrency } from '../lib/currency';
@@ -24,15 +27,24 @@ interface Customer {
   name: string;
   phone: string;
   email: string;
+  branch_id?: string | null;
   assigned_group_id: string | null;
   monthly_fee: number;
   status: string;
-  groups?: { name: string };
+  groups?: { name: string; branch_id?: string | null } | null;
+  branches?: { name: string } | null;
+}
+
+interface GroupOption {
+  id: string;
+  name: string;
+  branch_id?: string | null;
 }
 
 interface StudentPaymentRecord {
   id: string;
   customer_id: string;
+  branch_id?: string | null;
   month: string;
   year: number;
   amount: number;
@@ -47,9 +59,10 @@ interface StudentPaymentRecord {
 export const Students: React.FC = () => {
   const { t } = useTemplate();
   const { businessId } = useAuth();
+  const { selectedBranchId, activeBranches, isMultiBranch, isStaff, staffBranchId } = useBranch();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [groups, setGroups] = useState<GroupOption[]>([]);
   const [payments, setPayments] = useState<StudentPaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -58,6 +71,13 @@ export const Students: React.FC = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [entityToDelete, setEntityToDelete] = useState<{ id: string; name: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Transfer Branch Modal State
+  const [transferStudent, setTransferStudent] = useState<Customer | null>(null);
+  const [transferTargetBranchId, setTransferTargetBranchId] = useState<string>('');
+  const [transferTargetClassId, setTransferTargetClassId] = useState<string>('');
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
 
   // Payment & Invoice History Modal state
   const [historyStudent, setHistoryStudent] = useState<Customer | null>(null);
@@ -68,6 +88,7 @@ export const Students: React.FC = () => {
     name: '',
     phone: '',
     email: '',
+    branch_id: '',
     assigned_group_id: '',
     monthly_fee: 0,
     status: 'Active',
@@ -78,13 +99,13 @@ export const Students: React.FC = () => {
     const [customersRes, groupsRes, paymentsRes] = await Promise.all([
       supabase
         .from('customers')
-        .select('*, groups(name)')
+        .select('*, groups(name, branch_id), branches(name)')
         .eq('business_id', businessId)
         .order('created_at', { ascending: false }),
-      supabase.from('groups').select('id, name').eq('business_id', businessId),
+      supabase.from('groups').select('id, name, branch_id').eq('business_id', businessId),
       supabase
         .from('payments')
-        .select('id, customer_id, month, year, amount, payment_date, payment_method, status, reference_number, invoice_path, created_at')
+        .select('id, customer_id, branch_id, month, year, amount, payment_date, payment_method, status, reference_number, invoice_path, created_at')
         .eq('business_id', businessId)
         .order('payment_date', { ascending: false })
         .order('created_at', { ascending: false }),
@@ -111,6 +132,18 @@ export const Students: React.FC = () => {
     }
     return map;
   }, [payments]);
+
+  // Filter available classes for modal based on student's branch
+  const availableGroups = useMemo(() => {
+    if (!formData.branch_id) return groups;
+    return groups.filter(g => !g.branch_id || g.branch_id === formData.branch_id);
+  }, [groups, formData.branch_id]);
+
+  // Classes available for transfer target branch
+  const transferAvailableGroups = useMemo(() => {
+    if (!transferTargetBranchId) return [];
+    return groups.filter(g => !g.branch_id || g.branch_id === transferTargetBranchId);
+  }, [groups, transferTargetBranchId]);
 
   const handleViewInvoice = async (invoicePath: string, paymentId?: string) => {
     if (!businessId || !invoicePath) return;
@@ -154,7 +187,9 @@ export const Students: React.FC = () => {
 
     setSubmitting(true);
 
-    const payload = {
+    const effectiveBranchId = formData.branch_id || selectedBranchId || staffBranchId || (activeBranches.length > 0 ? activeBranches[0].id : null);
+
+    const payload: Record<string, any> = {
       name: nameTrimmed,
       phone: formData.phone.trim() || null,
       email: formData.email.trim() || null,
@@ -166,6 +201,10 @@ export const Students: React.FC = () => {
       status: formData.status || 'Active',
       business_id: businessId,
     };
+
+    if (effectiveBranchId) {
+      payload.branch_id = effectiveBranchId;
+    }
 
     try {
       let saveError: any = null;
@@ -211,12 +250,59 @@ export const Students: React.FC = () => {
       name: customer.name,
       phone: customer.phone || '',
       email: customer.email || '',
+      branch_id: customer.branch_id || selectedBranchId || staffBranchId || (activeBranches[0]?.id || ''),
       assigned_group_id: customer.assigned_group_id || '',
       monthly_fee: customer.monthly_fee || 0,
       status: customer.status || 'Active',
     });
     setEditingId(customer.id);
     setIsModalOpen(true);
+  };
+
+  const openTransferModal = (customer: Customer) => {
+    setTransferStudent(customer);
+    setTransferError(null);
+    // Suggest the other active branch as default target
+    const otherBranch = activeBranches.find(b => b.id !== customer.branch_id);
+    setTransferTargetBranchId(otherBranch ? otherBranch.id : (activeBranches[0]?.id || ''));
+    setTransferTargetClassId('');
+  };
+
+  const handleTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTransferError(null);
+    if (!businessId || !transferStudent) return;
+    if (!transferTargetBranchId) {
+      setTransferError('Please select a target branch.');
+      return;
+    }
+
+    setTransferSubmitting(true);
+    try {
+      const updatePayload: Record<string, any> = {
+        branch_id: transferTargetBranchId,
+        assigned_group_id: transferTargetClassId && transferTargetClassId !== 'none' ? transferTargetClassId : null,
+      };
+
+      const { error } = await supabase
+        .from('customers')
+        .update(updatePayload)
+        .eq('id', transferStudent.id)
+        .eq('business_id', businessId);
+
+      if (error) {
+        setTransferError(error.message || 'Failed to transfer student.');
+        setTransferSubmitting(false);
+        return;
+      }
+
+      setTransferSubmitting(false);
+      setTransferStudent(null);
+      fetchData();
+    } catch (err: any) {
+      setTransferError(err?.message || 'Unexpected error transferring student.');
+      setTransferSubmitting(false);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -258,6 +344,11 @@ export const Students: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('All');
 
   const filteredCustomers = customers.filter(c => {
+    // If a branch is selected in the topbar, only show students belonging to that branch
+    if (selectedBranchId && c.branch_id !== selectedBranchId) {
+      return false;
+    }
+
     const query = searchQuery.toLowerCase();
     const studentPayments = paymentsByCustomer[c.id] || [];
     const matchesInvoice = studentPayments.some(
@@ -268,6 +359,7 @@ export const Students: React.FC = () => {
       (c.phone && c.phone.includes(searchQuery)) ||
       (c.email && c.email.toLowerCase().includes(query)) ||
       (c.groups?.name && c.groups.name.toLowerCase().includes(query)) ||
+      (c.branches?.name && c.branches.name.toLowerCase().includes(query)) ||
       matchesInvoice;
 
     const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
@@ -276,10 +368,12 @@ export const Students: React.FC = () => {
 
   const openNewModal = () => {
     setFormError(null);
+    const initialBranchId = selectedBranchId || staffBranchId || (activeBranches.length > 0 ? activeBranches[0].id : '');
     setFormData({
       name: '',
       phone: '',
       email: '',
+      branch_id: initialBranchId,
       assigned_group_id: '',
       monthly_fee: 0,
       status: 'Active',
@@ -368,6 +462,7 @@ export const Students: React.FC = () => {
             <thead>
               <tr>
                 <th>Student</th>
+                {isMultiBranch && <th>Branch</th>}
                 <th>Contact</th>
                 <th>Class</th>
                 <th className="text-right">Monthly Fee</th>
@@ -386,6 +481,14 @@ export const Students: React.FC = () => {
                 return (
                   <tr key={c.id}>
                     <td className="primary-text">{c.name}</td>
+                    {isMultiBranch && (
+                      <td>
+                        <span className="badge badge-neutral flex items-center gap-1 w-fit">
+                          <Building2 size={12} className="text-gray-500" />
+                          {c.branches?.name || '—'}
+                        </span>
+                      </td>
+                    )}
                     <td>
                       <div>
                         <div>{c.phone || <span className="text-muted">—</span>}</div>
@@ -484,6 +587,15 @@ export const Students: React.FC = () => {
                         >
                           <FileText size={16} />
                         </button>
+                        {isMultiBranch && !isStaff && (
+                          <button
+                            onClick={() => openTransferModal(c)}
+                            className="action-btn edit text-amber-600 hover:text-amber-700"
+                            title="Transfer Branch"
+                          >
+                            <ArrowRightLeft size={16} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleEdit(c)}
                           className="action-btn edit"
@@ -547,6 +659,40 @@ export const Students: React.FC = () => {
             />
           </div>
 
+          {/* Multi-Branch Selector */}
+          {isMultiBranch && (
+            <div className="input-group">
+              <label className="input-label">Branch</label>
+              <select
+                disabled={isStaff}
+                className={`input bg-white text-base sm:text-sm ${isStaff ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`}
+                value={formData.branch_id}
+                onChange={e => {
+                  setFormError(null);
+                  const newBranchId = e.target.value;
+                  // If class doesn't belong to the new branch, clear assigned class
+                  const isCurrentClassValid = availableGroups.some(g => g.id === formData.assigned_group_id && (!g.branch_id || g.branch_id === newBranchId));
+                  setFormData({
+                    ...formData,
+                    branch_id: newBranchId,
+                    assigned_group_id: isCurrentClassValid ? formData.assigned_group_id : '',
+                  });
+                }}
+              >
+                {activeBranches.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              {isStaff && (
+                <p className="text-xs text-muted mt-1">
+                  Staff accounts are locked to their assigned branch.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="input-group">
               <label className="input-label">Phone</label>
@@ -587,15 +733,15 @@ export const Students: React.FC = () => {
               }}
             >
               <option value="">-- None --</option>
-              {groups.map(g => (
+              {availableGroups.map(g => (
                 <option key={g.id} value={g.id}>
                   {g.name}
                 </option>
               ))}
             </select>
-            {groups.length === 0 ? (
+            {availableGroups.length === 0 ? (
               <p className="text-xs text-amber-600 mt-1">
-                No active classes found. To assign a class like "Year 2", create it from the{' '}
+                No active classes found for this branch. Create a class from the{' '}
                 <a
                   href="/classes"
                   className="underline font-medium text-amber-700 hover:text-amber-900"
@@ -606,7 +752,7 @@ export const Students: React.FC = () => {
               </p>
             ) : (
               <p className="text-xs text-muted mt-1">
-                Optional. You can leave as "-- None --" or select a class.
+                Optional. You can leave as "-- None --" or select a class in this branch.
               </p>
             )}
           </div>
@@ -662,6 +808,92 @@ export const Students: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Transfer Branch Modal */}
+      {transferStudent && (
+        <Modal
+          isOpen={Boolean(transferStudent)}
+          onClose={() => setTransferStudent(null)}
+          title={`Transfer Student: ${transferStudent.name}`}
+        >
+          <form onSubmit={handleTransferSubmit} className="flex flex-col gap-4">
+            <p className="text-xs text-muted -mt-1">
+              Transfer this student to another active branch. Past payment records remain associated with their historical branch.
+            </p>
+
+            {transferError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-red-800">Transfer Failed</p>
+                  <p className="text-xs text-red-600 mt-0.5">{transferError}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs text-gray-700 space-y-1">
+              <div><strong className="text-gray-900">Current Branch:</strong> {transferStudent.branches?.name || 'Unassigned'}</div>
+              <div><strong className="text-gray-900">Current Class:</strong> {transferStudent.groups?.name || 'Unassigned'}</div>
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">Target Branch</label>
+              <select
+                required
+                className="input bg-white text-base sm:text-sm"
+                value={transferTargetBranchId}
+                onChange={e => {
+                  setTransferTargetBranchId(e.target.value);
+                  setTransferTargetClassId('');
+                }}
+              >
+                {activeBranches.map(b => (
+                  <option key={b.id} value={b.id} disabled={b.id === transferStudent.branch_id}>
+                    {b.name} {b.id === transferStudent.branch_id ? '(Current)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">New Class in Target Branch</label>
+              <select
+                className="input bg-white text-base sm:text-sm"
+                value={transferTargetClassId}
+                onChange={e => setTransferTargetClassId(e.target.value)}
+              >
+                <option value="">-- None (Clear Class Assignment) --</option>
+                {transferAvailableGroups.map(g => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted mt-1">
+                Because classes are branch-isolated, the student's class must belong to the new branch or be unassigned.
+              </p>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-4">
+              <button
+                type="button"
+                onClick={() => setTransferStudent(null)}
+                className="btn btn-ghost w-full sm:w-auto"
+                disabled={transferSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary w-full sm:w-auto min-w-[140px]"
+                disabled={transferSubmitting || !transferTargetBranchId || transferTargetBranchId === transferStudent.branch_id}
+              >
+                {transferSubmitting ? 'Transferring...' : 'Confirm Transfer'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Student Payment & Invoice History Modal */}
       <Modal

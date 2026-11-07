@@ -2,12 +2,13 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useTemplate } from '../context/TemplateContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import { formatCurrency } from '../lib/currency';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, BookOpen, CreditCard, TrendingUp, TrendingDown,
   GraduationCap, Plus, ArrowRight, CheckCircle, AlertCircle,
-  BarChart2, Receipt, Zap, Calendar
+  BarChart2, Receipt, Zap, Calendar, Building2
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -80,6 +81,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 export const Dashboard: React.FC = () => {
   const { t, modules } = useTemplate();
   const { businessId, displayName, businessName } = useAuth();
+  const { selectedBranchId, selectedBranch, isMultiBranch } = useBranch();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -118,19 +120,34 @@ export const Dashboard: React.FC = () => {
       });
     }
 
+    // Branch-isolated queries for students, classes, and payments
+    let paidQuery = supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Paid');
+    let pendingQuery = supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Pending');
+    let studentsQuery = supabase.from('customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active');
+    let classesQuery = supabase.from('groups').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active');
+    let recentPayQuery = supabase.from('payments').select('*, customers(name)').eq('business_id', businessId).order('payment_date', { ascending: false }).limit(5);
+
+    if (selectedBranchId) {
+      paidQuery = paidQuery.eq('branch_id', selectedBranchId);
+      pendingQuery = pendingQuery.eq('branch_id', selectedBranchId);
+      studentsQuery = studentsQuery.eq('branch_id', selectedBranchId);
+      classesQuery = classesQuery.eq('branch_id', selectedBranchId);
+      recentPayQuery = recentPayQuery.eq('branch_id', selectedBranchId);
+    }
+
     const [
       paidPayments, pendingPayments, expenses, staffPayments,
       students, classes, staff,
       recentPay, recentExp,
     ] = await Promise.all([
-      supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Paid'),
-      supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Pending'),
+      paidQuery,
+      pendingQuery,
       supabase.from('expenses').select('amount').eq('business_id', businessId).gte('date', firstDay).lte('date', lastDay),
       supabase.from('staff_payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active'),
-      supabase.from('groups').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active'),
+      studentsQuery,
+      classesQuery,
       supabase.from('staff').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
-      supabase.from('payments').select('*, customers(name)').eq('business_id', businessId).order('payment_date', { ascending: false }).limit(5),
+      recentPayQuery,
       supabase.from('expenses').select('*').eq('business_id', businessId).order('date', { ascending: false }).limit(5),
     ]);
 
@@ -152,11 +169,15 @@ export const Dashboard: React.FC = () => {
     setRecentPayments(recentPay.data || []);
     setRecentExpenses(recentExp.data || []);
 
-    // Build trend data in parallel
+    // Build trend data in parallel (collections branch-filtered; expenses business-wide)
     const trendResults = await Promise.all(
       months.map(async (m) => {
+        let incQuery = supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year).eq('status', 'Paid');
+        if (selectedBranchId) {
+          incQuery = incQuery.eq('branch_id', selectedBranchId);
+        }
         const [inc, excost, staffcost] = await Promise.all([
-          supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year).eq('status', 'Paid'),
+          incQuery,
           supabase.from('expenses').select('amount').eq('business_id', businessId).gte('date', m.firstDay).lte('date', m.lastDay),
           supabase.from('staff_payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year),
         ]);
@@ -169,7 +190,7 @@ export const Dashboard: React.FC = () => {
     setTrendData(trendResults);
 
     setLoading(false);
-  }, [businessId]);
+  }, [businessId, selectedBranchId]);
 
   useEffect(() => {
     fetchDashboardStats();
@@ -223,6 +244,12 @@ export const Dashboard: React.FC = () => {
           <h1 style={styles.welcomeTitle}>{greeting()}, {displayName}! 👋</h1>
           <p style={styles.welcomeSub}>
             {businessName ? `Welcome back to ${businessName} · ` : ''}{todayStr}
+            {isMultiBranch && (
+              <span className="ml-2 inline-flex items-center gap-1 font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded text-xs border border-blue-200">
+                <Building2 size={12} />
+                {selectedBranch ? selectedBranch.name : 'All Branches'}
+              </span>
+            )}
           </p>
         </div>
         <div style={styles.headerBadge}>
