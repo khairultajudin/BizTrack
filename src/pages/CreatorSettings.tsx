@@ -23,10 +23,10 @@ export const CreatorSettings: React.FC = () => {
     setFormColor(settings.brand_color);
   }, [template, modules, settings]);
 
-  if (role !== 'Creator') {
+  if (role !== 'Creator' && role !== 'Admin') {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-muted">You do not have permission to view Creator Settings.</p>
+        <p className="text-muted">You do not have permission to view Business Settings.</p>
       </div>
     );
   }
@@ -76,7 +76,7 @@ export const CreatorSettings: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Settings2 size={24} />
-            Creator Settings
+            Business Settings
           </h1>
           <p className="text-muted">Configure your business template, branding, and active modules.</p>
         </div>
@@ -167,20 +167,22 @@ export const CreatorSettings: React.FC = () => {
       </div>
 
       {/* Developer Tools */}
-      <div className="card flex flex-col gap-4 mt-2 border-l-4 border-l-purple-500">
-        <h2 className="font-semibold text-lg flex items-center gap-2 pb-2">
-          Developer Tools
-        </h2>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium">System Health & Diagnostics</p>
-            <p className="text-sm text-muted">View developer diagnostics, connection status, and infrastructure details.</p>
+      {role === 'Creator' && (
+        <div className="card flex flex-col gap-4 mt-2 border-l-4 border-l-purple-500">
+          <h2 className="font-semibold text-lg flex items-center gap-2 pb-2">
+            Developer Tools
+          </h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">System Health & Diagnostics</p>
+              <p className="text-sm text-muted">View developer diagnostics, connection status, and infrastructure details.</p>
+            </div>
+            <a href="/health" className="btn btn-ghost text-purple-600 hover:bg-purple-50">
+              View System Health
+            </a>
           </div>
-          <a href="/health" className="btn btn-ghost text-purple-600 hover:bg-purple-50">
-            View System Health
-          </a>
         </div>
-      </div>
+      )}
     </div>
   );
 };
