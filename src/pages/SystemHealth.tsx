@@ -39,7 +39,7 @@ export const SystemHealth: React.FC = () => {
       // 2. Check Seed Data (are there any staff?)
       const { count } = await supabase
         .from('staff')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('business_id', businessId);
 
       setHealth(prev => ({

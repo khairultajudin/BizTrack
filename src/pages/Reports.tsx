@@ -1,24 +1,40 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTemplate } from '../context/TemplateContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { TrendingUp, TrendingDown, DollarSign, Printer } from 'lucide-react';
+import { useBranch } from '../context/BranchContext';
+import { TrendingUp, TrendingDown, DollarSign, Printer, AlertCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ReportFilters, type FilterConfig } from '../components/ui/ReportFilters';
 import { formatCurrency } from '../lib/currency';
+import {
+  buildDashboardContextKey,
+  mapPayrollReconciliationRow,
+  PayrollReconciliationSummary,
+  unwrapMonthlyFinancialSummaryRpc,
+  unwrapPayrollReconciliationRpc,
+  unwrapSupabaseQuery,
+} from '../lib/dashboardFetch';
+import {
+  EMPTY_REPORTS_SUMMARY,
+  executeReportsFetch,
+  ReportsChartPoint,
+  ReportsSummaryPayload,
+} from '../lib/reportsFetch';
 
 export const Reports: React.FC = () => {
-  const { t, settings } = useTemplate();
-  const { businessId } = useAuth();
-  
+  const { t } = useTemplate();
+  const { user, businessId, isSalaryAuthorized } = useAuth();
+  const userId = user?.id ?? null;
+  const { selectedBranchId, isMultiBranch } = useBranch();
+  const fetchSeqRef = useRef(0);
+
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState({
-    totalIncome: 0,
-    totalExpenses: 0,
-    netProfit: 0,
-  });
-  
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loadedContextKey, setLoadedContextKey] = useState<string | null>(null);
+  const [summary, setSummary] = useState<ReportsSummaryPayload>(EMPTY_REPORTS_SUMMARY);
+  const [payrollReconciliation, setPayrollReconciliation] = useState<PayrollReconciliationSummary | null>(null);
+  const [chartData, setChartData] = useState<ReportsChartPoint[]>([]);
   const currentYear = new Date().getFullYear().toString();
   
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({
@@ -29,116 +45,179 @@ export const Reports: React.FC = () => {
   const [teachers, setTeachers] = useState<{id: string, name: string}[]>([]);
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!userId || !businessId) {
+      setClasses([]);
+      setTeachers([]);
+      return;
+    }
+    let cancelled = false;
     const fetchSelectOptions = async () => {
-      const [grpRes, staffRes] = await Promise.all([
-        supabase.from('groups').select('id, name').eq('business_id', businessId),
-        supabase.from('staff').select('id, name').eq('business_id', businessId)
+      let grpQuery = supabase.from('groups').select('id, name').eq('business_id', businessId);
+      if (selectedBranchId) {
+        grpQuery = grpQuery.eq('branch_id', selectedBranchId);
+      }
+      const [grpRes, dirRes] = await Promise.all([
+        grpQuery,
+        supabase.rpc('get_staff_directory', { p_business_id: businessId }),
       ]);
+      if (cancelled) return;
       if (grpRes.data) setClasses(grpRes.data);
-      if (staffRes.data) setTeachers(staffRes.data);
+      if (Array.isArray(dirRes.data)) {
+        const rows = dirRes.data as { id: string; name: string; branch_id?: string | null }[];
+        setTeachers(
+          selectedBranchId
+            ? rows.filter((r) => !r.branch_id || r.branch_id === selectedBranchId).map((r) => ({ id: r.id, name: r.name }))
+            : rows.map((r) => ({ id: r.id, name: r.name }))
+        );
+      }
     };
     fetchSelectOptions();
-  }, [businessId]);
+    return () => { cancelled = true; };
+  }, [userId, businessId, selectedBranchId]);
 
   const fetchReportData = useCallback(async () => {
-    if (!businessId) return;
-    setLoading(true);
-    
-    const yearToFetch = activeFilters.year || currentYear;
-    
-    // Fetch Payments
-    let payQuery = supabase.from('payments').select('amount, month, status, customers(assigned_group_id, groups(teacher_id))').eq('business_id', businessId).eq('year', yearToFetch);
-    
-    if (activeFilters.month) payQuery = payQuery.eq('month', activeFilters.month);
-    if (activeFilters.payment_status) payQuery = payQuery.eq('status', activeFilters.payment_status);
-    else payQuery = payQuery.eq('status', 'Paid'); // Default if no filter
-    
-    // Fetch Expenses
-    let expQuery = supabase.from('expenses').select('amount, date').eq('business_id', businessId).gte('date', `${yearToFetch}-01-01`).lte('date', `${yearToFetch}-12-31`);
-    
-    const [payRes, expRes] = await Promise.all([payQuery, expQuery]);
-    
-    let totalInc = 0;
-    let totalExp = 0;
-    
-    const monthlyData: Record<string, { income: number, expense: number }> = {
-      'January': { income: 0, expense: 0 },
-      'February': { income: 0, expense: 0 },
-      'March': { income: 0, expense: 0 },
-      'April': { income: 0, expense: 0 },
-      'May': { income: 0, expense: 0 },
-      'June': { income: 0, expense: 0 },
-      'July': { income: 0, expense: 0 },
-      'August': { income: 0, expense: 0 },
-      'September': { income: 0, expense: 0 },
-      'October': { income: 0, expense: 0 },
-      'November': { income: 0, expense: 0 },
-      'December': { income: 0, expense: 0 },
-    };
+    await executeReportsFetch<PayrollReconciliationSummary>({
+      seqRef: fetchSeqRef,
+      userId,
+      businessId,
+      selectedBranchId,
+      isSalaryAuthorized,
+      callbacks: {
+        setLoading,
+        setError,
+        setSummary,
+        setChartData,
+        setPayrollReconciliation,
+        setLoadedContextKey,
+      },
+      loadReport: async () => {
+        const yearToFetch = activeFilters.year || currentYear;
+        const numericYear = Number(yearToFetch);
+        const shouldIncludeExpenses = !activeFilters.class_id && !activeFilters.teacher_id && !Number.isNaN(numericYear);
 
-    if (payRes.data) {
-      payRes.data.forEach((p: any) => {
-        // Client-side filtering for joined tables since PostgREST makes deep filtering tricky
-        let matches = true;
-        
-        if (activeFilters.class_id) {
-          if (p.customers?.assigned_group_id !== activeFilters.class_id) matches = false;
-        }
-        
-        if (activeFilters.teacher_id) {
-          if (p.customers?.groups?.teacher_id !== activeFilters.teacher_id) matches = false;
-        }
+        let payQuery = supabase
+          .from('payments')
+          .select('amount, month, status, customers(assigned_group_id, groups(teacher_id))')
+          .eq('business_id', businessId!)
+          .eq('year', yearToFetch);
 
-        if (matches) {
-          totalInc += Number(p.amount);
-          if (monthlyData[p.month]) {
-            monthlyData[p.month].income += Number(p.amount);
+        if (selectedBranchId) payQuery = payQuery.eq('branch_id', selectedBranchId);
+        if (activeFilters.month) payQuery = payQuery.eq('month', activeFilters.month);
+        if (activeFilters.payment_status) payQuery = payQuery.eq('status', activeFilters.payment_status);
+        else payQuery = payQuery.eq('status', 'Paid');
+
+        const [payRes, monthlyFinRes, reconRes] = await Promise.all([
+          payQuery,
+          shouldIncludeExpenses
+            ? supabase.rpc('get_monthly_financial_summary', {
+                p_business_id: businessId!,
+                p_year: numericYear,
+                p_branch_id: selectedBranchId || null,
+              })
+            : Promise.resolve({ data: [], error: null }),
+          shouldIncludeExpenses && isSalaryAuthorized
+            ? supabase.rpc('get_payroll_reconciliation_summary', {
+                p_business_id: businessId!,
+                p_month: activeFilters.month || null,
+                p_year: numericYear,
+              })
+            : Promise.resolve({ data: null, error: null }),
+        ]);
+
+        const pay = unwrapSupabaseQuery(payRes, 'report payments');
+
+        const monthlyData: Record<string, { income: number; expense: number }> = {
+          January: { income: 0, expense: 0 },
+          February: { income: 0, expense: 0 },
+          March: { income: 0, expense: 0 },
+          April: { income: 0, expense: 0 },
+          May: { income: 0, expense: 0 },
+          June: { income: 0, expense: 0 },
+          July: { income: 0, expense: 0 },
+          August: { income: 0, expense: 0 },
+          September: { income: 0, expense: 0 },
+          October: { income: 0, expense: 0 },
+          November: { income: 0, expense: 0 },
+          December: { income: 0, expense: 0 },
+        };
+
+        let totalInc = 0;
+        let totalExp = 0;
+        let standaloneSalaryExp = 0;
+        let unresolvedCount = 0;
+        let unresolvedAmount = 0;
+        let isReconciled = true;
+
+        (pay.data || []).forEach((p: any) => {
+          let matches = true;
+          if (activeFilters.class_id && p.customers?.assigned_group_id !== activeFilters.class_id) {
+            matches = false;
           }
-        }
-      });
-    }
-
-    if (expRes.data) {
-      expRes.data.forEach((e: any) => {
-        const expenseMonth = new Date(e.date).toLocaleString('default', { month: 'long' });
-        
-        // If we are filtering by Class or Teacher, it doesn't make sense to show business expenses.
-        // So we only count expenses if those filters are empty.
-        if (!activeFilters.class_id && !activeFilters.teacher_id) {
-          if (!activeFilters.month || activeFilters.month === expenseMonth) {
-            totalExp += Number(e.amount);
+          if (activeFilters.teacher_id && p.customers?.groups?.teacher_id !== activeFilters.teacher_id) {
+            matches = false;
           }
-          
-          const monthIndex = new Date(e.date).getMonth();
-          const monthNames = Object.keys(monthlyData);
-          if (monthNames[monthIndex]) {
-            monthlyData[monthNames[monthIndex]].expense += Number(e.amount);
+          if (matches) {
+            totalInc += Number(p.amount);
+            if (monthlyData[p.month]) {
+              monthlyData[p.month].income += Number(p.amount);
+            }
           }
-        }
-      });
-    }
+        });
 
-    setSummary({
-      totalIncome: totalInc,
-      totalExpenses: totalExp,
-      netProfit: totalInc - totalExp
+        if (shouldIncludeExpenses) {
+          const monthlyRows = unwrapMonthlyFinancialSummaryRpc(monthlyFinRes);
+          monthlyRows.forEach((row) => {
+            if (monthlyData[row.month_name]) {
+              monthlyData[row.month_name].expense = row.total_expenses;
+              if (!activeFilters.month || activeFilters.month === row.month_name) {
+                totalExp += row.total_expenses;
+                standaloneSalaryExp += row.standalone_salary_expenses;
+                unresolvedCount += row.unresolved_salary_expense_count;
+                unresolvedAmount += row.unresolved_salary_expense_amount;
+                if (!row.is_reconciled) {
+                  isReconciled = false;
+                }
+              }
+            }
+          });
+        }
+
+        const reconciliation =
+          shouldIncludeExpenses && isSalaryAuthorized
+            ? unwrapPayrollReconciliationRpc(reconRes, isSalaryAuthorized, mapPayrollReconciliationRow)
+            : null;
+
+        const formattedChart = Object.keys(monthlyData)
+          .filter((m) => !activeFilters.month || activeFilters.month === m)
+          .map((m) => ({
+            name: m.substring(0, 3),
+            Income: monthlyData[m].income,
+            Expenses: monthlyData[m].expense,
+          }));
+
+        return {
+          summary: {
+            totalIncome: totalInc,
+            totalExpenses: totalExp,
+            netProfit: totalInc - totalExp,
+            standaloneSalaryExpenses: standaloneSalaryExp,
+            unresolvedSalaryExpenseCount: unresolvedCount,
+            unresolvedSalaryExpenseAmount: unresolvedAmount,
+            isReconciled,
+          },
+          chartData: formattedChart,
+          payrollReconciliation: reconciliation,
+        };
+      },
     });
-
-    const formattedChart = Object.keys(monthlyData)
-      .filter(m => !activeFilters.month || activeFilters.month === m)
-      .map(m => ({
-        name: m.substring(0, 3),
-        Income: monthlyData[m].income,
-        Expenses: monthlyData[m].expense,
-      }));
-
-    setChartData(formattedChart);
-    setLoading(false);
-  }, [businessId, activeFilters, currentYear]);
+  }, [userId, businessId, selectedBranchId, activeFilters, currentYear, isSalaryAuthorized]);
 
   useEffect(() => {
+    const seqRef = fetchSeqRef;
     fetchReportData();
+    return () => {
+      seqRef.current += 1;
+    };
   }, [fetchReportData]);
 
   const filterConfigs: FilterConfig[] = [
@@ -194,10 +273,54 @@ export const Reports: React.FC = () => {
         <ReportFilters storageKey="reports" configs={filterConfigs} onFilterChange={handleFilterChange} />
       </div>
 
-      {loading ? (
+      {loading || (buildDashboardContextKey(userId, businessId, selectedBranchId, isSalaryAuthorized) !== null && loadedContextKey !== buildDashboardContextKey(userId, businessId, selectedBranchId, isSalaryAuthorized) && !error) ? (
         <div className="p-12 text-center text-muted">Calculating reports...</div>
+      ) : error ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-900">Unable to load financial reports</p>
+              <p className="text-sm text-red-700 mt-0.5">{error}</p>
+            </div>
+          </div>
+          <button onClick={() => fetchReportData()} className="btn btn-outline">
+            Retry
+          </button>
+        </div>
       ) : (
         <>
+          {isSalaryAuthorized && isMultiBranch && payrollReconciliation && payrollReconciliation.unmapped_payroll > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs sm:text-sm text-amber-900">
+                <p className="font-semibold">
+                  Payroll Reconciliation Notice ({payrollReconciliation.unmapped_payment_count} unmapped historical payment{payrollReconciliation.unmapped_payment_count === 1 ? '' : 's'})
+                </p>
+                <p className="text-amber-800 mt-0.5">
+                  Consolidated Payroll ({formatCurrency(payrollReconciliation.consolidated_payroll)}) = Pauh Jaya Payroll ({formatCurrency(payrollReconciliation.pauh_jaya_payroll)}) + Kelisa Emas Payroll ({formatCurrency(payrollReconciliation.kelisa_emas_payroll)}) + Unmapped Payroll ({formatCurrency(payrollReconciliation.unmapped_payroll)}).
+                  {selectedBranchId
+                    ? ' Unmapped historical payroll is excluded from this branch report and included only in Consolidated (All Branches) totals until reconciled in Teachers.'
+                    : ' Individual branch reports exclude unmapped historical payroll until each record is assigned a branch in Teachers.'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!summary.isReconciled && summary.unresolvedSalaryExpenseCount > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs sm:text-sm text-amber-900">
+                <p className="font-semibold">
+                  Pending Salary Expense Reconciliation ({summary.unresolvedSalaryExpenseCount} unresolved record{summary.unresolvedSalaryExpenseCount === 1 ? '' : 's'} · {formatCurrency(summary.unresolvedSalaryExpenseAmount)})
+                </p>
+                <p className="text-amber-800 mt-0.5">
+                  Total Expenses and Net Profit below reflect confirmed expenses only (including {formatCurrency(summary.standaloneSalaryExpenses)} in confirmed standalone salary expenses). Unresolved Salary expense records are excluded until classified in Expenses.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="card flex flex-col gap-2 border-t-4 border-t-blue-500">
               <div className="flex items-center justify-between text-muted">
@@ -209,7 +332,9 @@ export const Reports: React.FC = () => {
 
             <div className="card flex flex-col gap-2 border-t-4 border-t-red-500">
               <div className="flex items-center justify-between text-muted">
-                <span className="font-medium text-sm">Total Expenses</span>
+                <span className="font-medium text-sm">
+                  {summary.isReconciled ? 'Total Expenses' : 'Confirmed Expenses (Pending Reconciliation)'}
+                </span>
                 <TrendingDown size={18} className="text-red-500" />
               </div>
               <span className="text-3xl font-bold">{formatCurrency(summary.totalExpenses)}</span>
@@ -217,7 +342,9 @@ export const Reports: React.FC = () => {
 
             <div className="card flex flex-col gap-2 border-t-4 border-t-green-500">
               <div className="flex items-center justify-between text-muted">
-                <span className="font-medium text-sm">Net Profit</span>
+                <span className="font-medium text-sm">
+                  {summary.isReconciled ? 'Net Profit' : 'Confirmed Net Profit (Pending Reconciliation)'}
+                </span>
                 <DollarSign size={18} className="text-green-500" />
               </div>
               <span className="text-3xl font-bold">{formatCurrency(summary.netProfit)}</span>

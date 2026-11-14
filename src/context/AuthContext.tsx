@@ -27,6 +27,7 @@ interface AuthContextType {
   businessId: string | null;
   businessName: string | null;
   role: string | null;
+  isSalaryAuthorized: boolean;
 
   refreshAuth: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -61,6 +62,7 @@ export const AuthContext = createContext<AuthContextType>({
   businessId: null,
   businessName: null,
   role: null,
+  isSalaryAuthorized: false,
   refreshAuth: async () => {},
   refreshProfile: async () => {},
 });
@@ -164,6 +166,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const displayName = resolveDisplayName(profile, user);
   const initials = resolveInitials(displayName);
 
+  // ── Salary authorization (Strictly pinned to Puan Hana & target business) ──
+  const TARGET_SALARY_ADMIN_UID = 'd2b660bf-10d3-4d94-94ec-0b8f6e0908e6';
+  const TARGET_SALARY_BIZ_ID = '978d2b0c-6a2b-4c28-9000-71dc23f96781';
+  const isSalaryAuthorized = Boolean(
+    user?.id === TARGET_SALARY_ADMIN_UID && businessId === TARGET_SALARY_BIZ_ID
+  );
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -174,6 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       businessId,
       businessName,
       role,
+      isSalaryAuthorized,
       refreshAuth,
       refreshProfile,
     }}>
