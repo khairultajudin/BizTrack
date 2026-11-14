@@ -1,9 +1,20 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTemplate } from '../context/TemplateContext';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import { formatCurrency } from '../lib/currency';
+import {
+  EMPTY_DASHBOARD_STATS,
+  PayrollReconciliationSummary,
+  buildDashboardContextKey,
+  executeDashboardFetch,
+  filterVisibleExpenses,
+  mapPayrollReconciliationRow,
+  unwrapFinancialSummaryRpc,
+  unwrapSupabaseQuery,
+  unwrapPayrollReconciliationRpc,
+} from '../lib/dashboardFetch';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, BookOpen, CreditCard, TrendingUp, TrendingDown,
@@ -25,6 +36,10 @@ interface DashboardStats {
   totalStudents: number;
   totalClasses: number;
   totalTeachers: number;
+  standaloneSalaryExpenses: number;
+  unresolvedSalaryExpenseCount: number;
+  unresolvedSalaryExpenseAmount: number;
+  isReconciled: boolean;
 }
 
 interface RecentPayment {
@@ -80,27 +95,22 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 export const Dashboard: React.FC = () => {
   const { t, modules } = useTemplate();
-  const { businessId, displayName, businessName } = useAuth();
+  const { user, businessId, displayName, businessName, isSalaryAuthorized } = useAuth();
+  const userId = user?.id ?? null;
   const { selectedBranchId, selectedBranch, isMultiBranch } = useBranch();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats>({
-    monthlyCollection: 0,
-    monthlyExpenses: 0,
-    netProfit: 0,
-    outstandingPayment: 0,
-    totalStudents: 0,
-    totalClasses: 0,
-    totalTeachers: 0,
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [loadedContextKey, setLoadedContextKey] = useState<string | null>(null);
+  const [stats, setStats] = useState<DashboardStats>(EMPTY_DASHBOARD_STATS);
   const [recentPayments, setRecentPayments] = useState<RecentPayment[]>([]);
   const [recentExpenses, setRecentExpenses] = useState<RecentExpense[]>([]);
   const [trendData, setTrendData] = useState<MonthlyTrend[]>([]);
+  const [payrollReconciliation, setPayrollReconciliation] = useState<PayrollReconciliationSummary | null>(null);
+  const fetchSeqRef = useRef(0);
 
   const fetchDashboardStats = useCallback(async () => {
-    if (!businessId) return;
-
     const now = new Date();
     const currentMonth = now.toLocaleString('default', { month: 'long' });
     const currentYear = now.getFullYear();
@@ -120,80 +130,133 @@ export const Dashboard: React.FC = () => {
       });
     }
 
-    // Branch-isolated queries for students, classes, and payments
-    let paidQuery = supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Paid');
-    let pendingQuery = supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Pending');
-    let studentsQuery = supabase.from('customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active');
-    let classesQuery = supabase.from('groups').select('*', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Active');
-    let recentPayQuery = supabase.from('payments').select('*, customers(name)').eq('business_id', businessId).order('payment_date', { ascending: false }).limit(5);
+    // Centralized financial summary helper:
+    // Total Expenses = Non-Salary Expenses + Authoritative Teacher Payroll (staff_payments)
+    const fetchFinancialSummary = async (
+      startDate: string,
+      endDate: string,
+      monthName: string,
+      yr: number
+    ) => {
+      if (!businessId) {
+        throw new Error('Business context is required to load financial summary.');
+      }
+      const result = await supabase.rpc('get_financial_summary', {
+        p_business_id: businessId,
+        p_start_date: startDate,
+        p_end_date: endDate,
+        p_month: monthName,
+        p_year: yr,
+        p_branch_id: selectedBranchId || null,
+      });
+      return unwrapFinancialSummaryRpc(result);
+    };
 
-    if (selectedBranchId) {
-      paidQuery = paidQuery.eq('branch_id', selectedBranchId);
-      pendingQuery = pendingQuery.eq('branch_id', selectedBranchId);
-      studentsQuery = studentsQuery.eq('branch_id', selectedBranchId);
-      classesQuery = classesQuery.eq('branch_id', selectedBranchId);
-      recentPayQuery = recentPayQuery.eq('branch_id', selectedBranchId);
-    }
+    // Helper to fetch payroll reconciliation summary for Puan Hana (isSalaryAuthorized)
+    const fetchPayrollReconciliation = async (monthName: string, yr: number): Promise<PayrollReconciliationSummary | null> => {
+      if (!businessId || !isSalaryAuthorized) return null;
+      const result = await supabase.rpc('get_payroll_reconciliation_summary', {
+        p_business_id: businessId,
+        p_month: monthName,
+        p_year: yr,
+      });
+      return unwrapPayrollReconciliationRpc(result, isSalaryAuthorized, mapPayrollReconciliationRow);
+    };
 
-    const [
-      paidPayments, pendingPayments, expenses, staffPayments,
-      students, classes, staff,
-      recentPay, recentExp,
-    ] = await Promise.all([
-      paidQuery,
-      pendingQuery,
-      supabase.from('expenses').select('amount').eq('business_id', businessId).gte('date', firstDay).lte('date', lastDay),
-      supabase.from('staff_payments').select('amount').eq('business_id', businessId).eq('month', currentMonth).eq('year', currentYear),
-      studentsQuery,
-      classesQuery,
-      supabase.from('staff').select('*', { count: 'exact', head: true }).eq('business_id', businessId),
-      recentPayQuery,
-      supabase.from('expenses').select('*').eq('business_id', businessId).order('date', { ascending: false }).limit(5),
-    ]);
+    await executeDashboardFetch<RecentPayment, RecentExpense, MonthlyTrend, PayrollReconciliationSummary>({
+      seqRef: fetchSeqRef,
+      userId,
+      businessId,
+      selectedBranchId,
+      isSalaryAuthorized,
+      callbacks: {
+        setLoading,
+        setError,
+        setLoadedContextKey,
+        setStats,
+        setRecentPayments,
+        setRecentExpenses,
+        setTrendData,
+        setPayrollReconciliation,
+      },
+      loadPrimary: async () => {
+        // Branch-isolated queries for students, classes, pending payments, recent activity, and teachers
+        let pendingQuery = supabase.from('payments').select('amount').eq('business_id', businessId!).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Pending');
+        let studentsQuery = supabase.from('customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId!).eq('status', 'Active');
+        let classesQuery = supabase.from('groups').select('*', { count: 'exact', head: true }).eq('business_id', businessId!).eq('status', 'Active');
+        let staffQuery = supabase.from('staff').select('id', { count: 'exact', head: true }).eq('business_id', businessId!);
+        let recentPayQuery = supabase.from('payments').select('*, customers(name)').eq('business_id', businessId!).order('payment_date', { ascending: false }).limit(5);
+        let recentExpQuery = supabase.from('expenses').select('*').eq('business_id', businessId!).order('date', { ascending: false }).limit(5);
 
-    const collection = (paidPayments.data || []).reduce((a, c) => a + Number(c.amount), 0);
-    const outstanding = (pendingPayments.data || []).reduce((a, c) => a + Number(c.amount), 0);
-    const exp = (expenses.data || []).reduce((a, c) => a + Number(c.amount), 0);
-    const staffExp = (staffPayments.data || []).reduce((a, c) => a + Number(c.amount), 0);
-
-    setStats({
-      monthlyCollection: collection,
-      monthlyExpenses: exp + staffExp,
-      netProfit: collection - exp - staffExp,
-      outstandingPayment: outstanding,
-      totalStudents: students.count || 0,
-      totalClasses: classes.count || 0,
-      totalTeachers: staff.count || 0,
-    });
-
-    setRecentPayments(recentPay.data || []);
-    setRecentExpenses(recentExp.data || []);
-
-    // Build trend data in parallel (collections branch-filtered; expenses business-wide)
-    const trendResults = await Promise.all(
-      months.map(async (m) => {
-        let incQuery = supabase.from('payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year).eq('status', 'Paid');
         if (selectedBranchId) {
-          incQuery = incQuery.eq('branch_id', selectedBranchId);
+          pendingQuery = pendingQuery.eq('branch_id', selectedBranchId);
+          studentsQuery = studentsQuery.eq('branch_id', selectedBranchId);
+          classesQuery = classesQuery.eq('branch_id', selectedBranchId);
+          staffQuery = staffQuery.eq('branch_id', selectedBranchId);
+          recentPayQuery = recentPayQuery.eq('branch_id', selectedBranchId);
+          recentExpQuery = recentExpQuery.eq('branch_id', selectedBranchId);
         }
-        const [inc, excost, staffcost] = await Promise.all([
-          incQuery,
-          supabase.from('expenses').select('amount').eq('business_id', businessId).gte('date', m.firstDay).lte('date', m.lastDay),
-          supabase.from('staff_payments').select('amount').eq('business_id', businessId).eq('month', m.monthName).eq('year', m.year),
-        ]);
-        const income = (inc.data || []).reduce((a, c) => a + Number(c.amount), 0);
-        const exTotal = (excost.data || []).reduce((a, c) => a + Number(c.amount), 0) +
-                        (staffcost.data || []).reduce((a, c) => a + Number(c.amount), 0);
-        return { label: m.label, Income: income, Expenses: exTotal };
-      })
-    );
-    setTrendData(trendResults);
 
-    setLoading(false);
-  }, [businessId, selectedBranchId]);
+        const [
+          financialSummary, pendingRes,
+          studentsRes, classesRes, staffRes,
+          recentPayRes, recentExpRes, reconciliationRes,
+        ] = await Promise.all([
+          fetchFinancialSummary(firstDay, lastDay, currentMonth, currentYear),
+          pendingQuery,
+          studentsQuery,
+          classesQuery,
+          staffQuery,
+          recentPayQuery,
+          recentExpQuery,
+          fetchPayrollReconciliation(currentMonth, currentYear),
+        ]);
+
+        const pendingPayments = unwrapSupabaseQuery(pendingRes, 'pending payments');
+        const students = unwrapSupabaseQuery(studentsRes, 'students count');
+        const classes = unwrapSupabaseQuery(classesRes, 'classes count');
+        const staff = unwrapSupabaseQuery(staffRes, 'staff count');
+        const recentPay = unwrapSupabaseQuery(recentPayRes, 'recent payments');
+        const recentExp = unwrapSupabaseQuery(recentExpRes, 'recent expenses');
+
+        const outstanding = (pendingPayments.data || []).reduce((a, c) => a + Number(c.amount), 0);
+
+        return {
+          payrollReconciliation: reconciliationRes,
+          stats: {
+            monthlyCollection: financialSummary.collections,
+            monthlyExpenses: financialSummary.total_expenses,
+            netProfit: financialSummary.net_profit,
+            outstandingPayment: outstanding,
+            totalStudents: students.count || 0,
+            totalClasses: classes.count || 0,
+            totalTeachers: staff.count || 0,
+            standaloneSalaryExpenses: financialSummary.standalone_salary_expenses,
+            unresolvedSalaryExpenseCount: financialSummary.unresolved_salary_expense_count,
+            unresolvedSalaryExpenseAmount: financialSummary.unresolved_salary_expense_amount,
+            isReconciled: financialSummary.is_reconciled,
+          },
+          recentPayments: recentPay.data || [],
+          recentExpenses: filterVisibleExpenses(recentExp.data || [], isSalaryAuthorized),
+        };
+      },
+      loadTrend: async () => {
+        return Promise.all(
+          months.map(async (m) => {
+            const summary = await fetchFinancialSummary(m.firstDay, m.lastDay, m.monthName, m.year);
+            return { label: m.label, Income: summary.collections, Expenses: summary.total_expenses };
+          })
+        );
+      },
+    });
+  }, [userId, businessId, selectedBranchId, isSalaryAuthorized]);
 
   useEffect(() => {
+    const seqRef = fetchSeqRef;
     fetchDashboardStats();
+    return () => {
+      seqRef.current += 1;
+    };
   }, [fetchDashboardStats]);
 
   const greeting = () => {
@@ -205,9 +268,17 @@ export const Dashboard: React.FC = () => {
 
   const todayStr = new Date().toLocaleDateString('en-MY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+  const currentContextKey = buildDashboardContextKey(
+    userId,
+    businessId,
+    selectedBranchId,
+    isSalaryAuthorized
+  );
+  const isContextSynced = currentContextKey !== null && loadedContextKey === currentContextKey;
+
   // ─── Loading skeleton ───────────────────────────────────────────────────────
 
-  if (loading) {
+  if (loading || (!error && currentContextKey !== null && !isContextSynced)) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         <div style={styles.header}>
@@ -258,6 +329,77 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* ── ERROR BANNER (SAFE FAIL-CLOSED STATE) ── */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3" role="alert">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs sm:text-sm text-red-900">
+              <p className="font-semibold">Financial Data Unavailable</p>
+              <p className="text-red-800 mt-0.5">{error}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => fetchDashboardStats()}
+            className="text-xs font-semibold text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg border border-red-300 transition-colors whitespace-nowrap self-start sm:self-center"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* ── UNMAPPED HISTORICAL PAYROLL RECONCILIATION BANNER (PUAN HANA ONLY) ── */}
+      {isSalaryAuthorized && isMultiBranch && payrollReconciliation && payrollReconciliation.unmapped_payroll > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs sm:text-sm text-amber-900">
+              <p className="font-semibold">
+                Unmapped Historical Payroll Detected ({payrollReconciliation.unmapped_payment_count} record{payrollReconciliation.unmapped_payment_count === 1 ? '' : 's'})
+              </p>
+              <p className="text-amber-800 mt-0.5">
+                Consolidated Payroll ({formatCurrency(payrollReconciliation.consolidated_payroll)}) = Pauh Jaya ({formatCurrency(payrollReconciliation.pauh_jaya_payroll)}) + Kelisa Emas ({formatCurrency(payrollReconciliation.kelisa_emas_payroll)}) + Unmapped Payroll ({formatCurrency(payrollReconciliation.unmapped_payroll)}).
+                {selectedBranchId
+                  ? ' Unmapped historical payroll is excluded from individual branch totals until reconciled.'
+                  : ' Branch totals will not sum to Consolidated Payroll until unmapped historical payments are assigned a branch.'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/teachers')}
+            className="btn btn-outline text-xs whitespace-nowrap self-start sm:self-center"
+          >
+            Reconcile Payroll
+          </button>
+        </div>
+      )}
+
+      {/* ── UNRESOLVED SALARY EXPENSE RECONCILIATION BANNER ── */}
+      {!stats.isReconciled && stats.unresolvedSalaryExpenseCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs sm:text-sm text-amber-900">
+              <p className="font-semibold">
+                Pending Salary Expense Reconciliation ({stats.unresolvedSalaryExpenseCount} unresolved record{stats.unresolvedSalaryExpenseCount === 1 ? '' : 's'} · {formatCurrency(stats.unresolvedSalaryExpenseAmount)})
+              </p>
+              <p className="text-amber-800 mt-0.5">
+                Confirmed Expenses ({formatCurrency(stats.monthlyExpenses)}) and Net Profit ({formatCurrency(stats.netProfit)}) exclude unresolved Salary expense records until classified as Linked Payroll Duplicate or Confirmed Standalone Expense.
+              </p>
+            </div>
+          </div>
+          {isSalaryAuthorized && (
+            <button
+              onClick={() => navigate('/expenses')}
+              className="btn btn-outline text-xs whitespace-nowrap self-start sm:self-center"
+            >
+              Reconcile Expenses
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── KPI CARDS ── */}
       <div style={styles.kpiGrid}>
         <KpiCard
@@ -276,7 +418,7 @@ export const Dashboard: React.FC = () => {
           iconBg="#F0FDF4"
           iconColor="#10B981"
           suffix="active"
-          onClick={() => navigate('/teachers')}
+          onClick={isSalaryAuthorized ? () => navigate('/teachers') : undefined}
         />
         <KpiCard
           label={`Active ${t('classes')}`}
@@ -439,7 +581,7 @@ export const Dashboard: React.FC = () => {
               {modules.students && (
                 <QuickAction icon={<Users size={15} />} label={`Add ${t('students').slice(0, -1)}`} color="#3B82F6" onClick={() => navigate('/students')} />
               )}
-              {modules.teachers && (
+              {modules.teachers && isSalaryAuthorized && (
                 <QuickAction icon={<GraduationCap size={15} />} label={`Add ${t('teachers').slice(0, -1)}`} color="#10B981" onClick={() => navigate('/teachers')} />
               )}
               {modules.classes && (
