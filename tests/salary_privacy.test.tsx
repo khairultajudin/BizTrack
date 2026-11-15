@@ -686,7 +686,7 @@ const dashboardSrc = fs.readFileSync(path.join(rootDir, 'src/pages/Dashboard.tsx
 const expensesSrc = fs.readFileSync(path.join(rootDir, 'src/pages/Expenses.tsx'), 'utf8');
 const reportsSrc = fs.readFileSync(path.join(rootDir, 'src/pages/Reports.tsx'), 'utf8');
 const migrationSql = fs.readFileSync(path.join(rootDir, 'supabase/08_salary_privacy.sql'), 'utf8');
-const rollbackSql = fs.readFileSync(path.join(rootDir, 'supabase/08_salary_privacy_rollback.sql'), 'utf8');
+const rollbackSql = fs.readFileSync(path.join(rootDir, 'supabase/08_salary_privacy_rollback.sql'), 'utf8').replace(/\r\n/g, '\n');
 const testSql = fs.readFileSync(path.join(rootDir, 'supabase/08_salary_privacy_test.sql'), 'utf8');
 
 assert(
