@@ -63,10 +63,16 @@ export const Reports: React.FC = () => {
       if (cancelled) return;
       if (grpRes.data) setClasses(grpRes.data);
       if (Array.isArray(dirRes.data)) {
-        const rows = dirRes.data as { id: string; name: string; branch_id?: string | null }[];
+        const rows = dirRes.data as { id: string; name: string; branch_id?: string | null; branch_ids?: string[] | null }[];
         setTeachers(
           selectedBranchId
-            ? rows.filter((r) => !r.branch_id || r.branch_id === selectedBranchId).map((r) => ({ id: r.id, name: r.name }))
+            ? rows
+                .filter((r) =>
+                  Array.isArray(r.branch_ids)
+                    ? r.branch_ids.includes(selectedBranchId)
+                    : r.branch_id === selectedBranchId
+                )
+                .map((r) => ({ id: r.id, name: r.name }))
             : rows.map((r) => ({ id: r.id, name: r.name }))
         );
       }

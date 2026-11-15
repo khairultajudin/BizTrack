@@ -184,7 +184,7 @@ export const Dashboard: React.FC = () => {
         let pendingQuery = supabase.from('payments').select('amount').eq('business_id', businessId!).eq('month', currentMonth).eq('year', currentYear).eq('status', 'Pending');
         let studentsQuery = supabase.from('customers').select('*', { count: 'exact', head: true }).eq('business_id', businessId!).eq('status', 'Active');
         let classesQuery = supabase.from('groups').select('*', { count: 'exact', head: true }).eq('business_id', businessId!).eq('status', 'Active');
-        let staffQuery = supabase.from('staff').select('id', { count: 'exact', head: true }).eq('business_id', businessId!);
+        const staffPromise = supabase.rpc('get_staff_directory', { p_business_id: businessId! });
         let recentPayQuery = supabase.from('payments').select('*, customers(name)').eq('business_id', businessId!).order('payment_date', { ascending: false }).limit(5);
         let recentExpQuery = supabase.from('expenses').select('*').eq('business_id', businessId!).order('date', { ascending: false }).limit(5);
 
@@ -192,7 +192,6 @@ export const Dashboard: React.FC = () => {
           pendingQuery = pendingQuery.eq('branch_id', selectedBranchId);
           studentsQuery = studentsQuery.eq('branch_id', selectedBranchId);
           classesQuery = classesQuery.eq('branch_id', selectedBranchId);
-          staffQuery = staffQuery.eq('branch_id', selectedBranchId);
           recentPayQuery = recentPayQuery.eq('branch_id', selectedBranchId);
           recentExpQuery = recentExpQuery.eq('branch_id', selectedBranchId);
         }
@@ -206,7 +205,7 @@ export const Dashboard: React.FC = () => {
           pendingQuery,
           studentsQuery,
           classesQuery,
-          staffQuery,
+          staffPromise,
           recentPayQuery,
           recentExpQuery,
           fetchPayrollReconciliation(currentMonth, currentYear),
@@ -215,7 +214,15 @@ export const Dashboard: React.FC = () => {
         const pendingPayments = unwrapSupabaseQuery(pendingRes, 'pending payments');
         const students = unwrapSupabaseQuery(studentsRes, 'students count');
         const classes = unwrapSupabaseQuery(classesRes, 'classes count');
-        const staff = unwrapSupabaseQuery(staffRes, 'staff count');
+        const staffRows = unwrapSupabaseQuery(staffRes, 'staff directory').data as
+          | { id: string; branch_id?: string | null; branch_ids?: string[] | null }[]
+          | null;
+        const totalTeachers = (staffRows || []).filter((r) => {
+          if (!selectedBranchId) return true;
+          return Array.isArray(r.branch_ids)
+            ? r.branch_ids.includes(selectedBranchId)
+            : r.branch_id === selectedBranchId;
+        }).length;
         const recentPay = unwrapSupabaseQuery(recentPayRes, 'recent payments');
         const recentExp = unwrapSupabaseQuery(recentExpRes, 'recent expenses');
 
@@ -230,7 +237,7 @@ export const Dashboard: React.FC = () => {
             outstandingPayment: outstanding,
             totalStudents: students.count || 0,
             totalClasses: classes.count || 0,
-            totalTeachers: staff.count || 0,
+            totalTeachers,
             standaloneSalaryExpenses: financialSummary.standalone_salary_expenses,
             unresolvedSalaryExpenseCount: financialSummary.unresolved_salary_expense_count,
             unresolvedSalaryExpenseAmount: financialSummary.unresolved_salary_expense_amount,

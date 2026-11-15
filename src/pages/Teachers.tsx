@@ -12,11 +12,19 @@ import { formatCurrency } from '../lib/currency';
 interface Staff {
   id: string;
   branch_id?: string | null;
+  branch_ids?: string[] | null;
   name: string;
   role: string;
   phone?: string;
   salary_type?: string;
   salary_amount?: number;
+}
+
+export function getAssignedBranchIds(member: Pick<Staff, 'branch_id' | 'branch_ids'>): string[] {
+  if (Array.isArray(member.branch_ids)) {
+    return member.branch_ids.filter((id): id is string => Boolean(id));
+  }
+  return member.branch_id ? [member.branch_id] : [];
 }
 
 interface HistoricalPayrollAuditRow {
@@ -150,13 +158,14 @@ export const Teachers: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [entityToDelete, setEntityToDelete] = useState<{id: string, name: string} | null>(null);
   
   const [formData, setFormData] = useState({
-    name: '', role: '', phone: '', salary_type: 'Monthly', salary_amount: 0, branch_id: ''
+    name: '', role: '', phone: '', salary_type: 'Monthly', salary_amount: 0, branch_ids: [] as string[]
   });
 
   const fetchStaff = useCallback(async () => {
@@ -290,7 +299,10 @@ export const Teachers: React.FC = () => {
     setSubmitting(true);
 
     try {
-      const resolvedBranchId = isMultiBranch ? (formData.branch_id || selectedBranchId || null) : null;
+      const resolvedBranchIds = isMultiBranch
+        ? Array.from(new Set(formData.branch_ids.filter(Boolean)))
+        : [];
+      const resolvedBranchId = resolvedBranchIds.length === 1 ? resolvedBranchIds[0] : null;
       const { error: saveError } = await supabase.rpc('save_teacher_with_salary', {
         p_business_id: businessId,
         p_name: nameTrimmed,
@@ -301,6 +313,7 @@ export const Teachers: React.FC = () => {
         p_notes: null,
         p_teacher_id: editingId || null,
         p_branch_id: resolvedBranchId,
+        p_branch_ids: isMultiBranch ? resolvedBranchIds : null,
       });
 
       if (saveError) {
@@ -318,6 +331,11 @@ export const Teachers: React.FC = () => {
 
       setSubmitting(false);
       setIsModalOpen(false);
+      setSaveSuccess(
+        editingId
+          ? `Updated ${nameTrimmed} and branch assignments.`
+          : `Added ${nameTrimmed} successfully.`
+      );
       fetchStaff();
     } catch (err: any) {
       console.error('Unexpected error in handleSubmit:', err);
@@ -328,10 +346,11 @@ export const Teachers: React.FC = () => {
 
   const handleEdit = (member: Staff) => {
     setFormError(null);
+    setSaveSuccess(null);
     setFormData({
       name: member.name, role: member.role || '', phone: member.phone || '', 
       salary_type: member.salary_type || 'Monthly', salary_amount: member.salary_amount || 0,
-      branch_id: member.branch_id || selectedBranchId || ''
+      branch_ids: getAssignedBranchIds(member),
     });
     setEditingId(member.id);
     setIsModalOpen(true);
@@ -366,10 +385,8 @@ export const Teachers: React.FC = () => {
   }
 
   const filteredStaff = staff.filter(s => {
-    if (selectedBranchId && isSalaryAuthorized && s.branch_id !== selectedBranchId) {
-      return false;
-    }
-    if (selectedBranchId && !isSalaryAuthorized && s.branch_id && s.branch_id !== selectedBranchId) {
+    const assignedBranches = getAssignedBranchIds(s);
+    if (selectedBranchId && !assignedBranches.includes(selectedBranchId)) {
       return false;
     }
     return (
@@ -382,12 +399,26 @@ export const Teachers: React.FC = () => {
 
   const openNewModal = () => {
     setFormError(null);
+    setSaveSuccess(null);
     setFormData({
       name: '', role: '', phone: '', salary_type: 'Monthly', salary_amount: 0,
-      branch_id: selectedBranchId || (branches[0]?.id || '')
+      branch_ids: selectedBranchId ? [selectedBranchId] : []
     });
     setEditingId(null);
     setIsModalOpen(true);
+  };
+
+  const toggleBranchSelection = (branchId: string) => {
+    setFormError(null);
+    setFormData(prev => {
+      const exists = prev.branch_ids.includes(branchId);
+      return {
+        ...prev,
+        branch_ids: exists
+          ? prev.branch_ids.filter(id => id !== branchId)
+          : [...prev.branch_ids, branchId],
+      };
+    });
   };
 
   const getBranchName = (branchId?: string | null) => {
@@ -508,6 +539,22 @@ export const Teachers: React.FC = () => {
       )}
 
       {/* Toolbar: Search */}
+      {saveSuccess && isSalaryAuthorized && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{saveSuccess}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSaveSuccess(null)}
+            className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {staff.length > 0 && (
         <div className="management-toolbar">
           <div className="search-input-wrapper">
@@ -575,14 +622,27 @@ export const Teachers: React.FC = () => {
                   <td className="primary-text">{s.name}</td>
                   {isMultiBranch && (
                     <td>
-                      {getBranchName(s.branch_id) ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full">
-                          <Building2 size={12} />
-                          {getBranchName(s.branch_id)}
-                        </span>
-                      ) : (
-                        <span className="text-muted">—</span>
-                      )}
+                      {(() => {
+                        const branchNames = getAssignedBranchIds(s)
+                          .map(id => getBranchName(id))
+                          .filter((name): name is string => Boolean(name));
+                        if (branchNames.length === 0) {
+                          return <span className="text-muted">—</span>;
+                        }
+                        return (
+                          <div className="flex flex-wrap gap-1.5">
+                            {branchNames.map(name => (
+                              <span
+                                key={name}
+                                className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full"
+                              >
+                                <Building2 size={12} />
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                   )}
                   <td>{s.role || <span className="text-muted">—</span>}</td>
@@ -649,19 +709,42 @@ export const Teachers: React.FC = () => {
             <label className="input-label">Teacher Name</label>
             <input required type="text" className="input text-base sm:text-sm" value={formData.name} onChange={e => { setFormError(null); setFormData({...formData, name: e.target.value}); }} placeholder="e.g. Cikgu Sarah" />
           </div>
-          {isMultiBranch && (
+          {isMultiBranch && isSalaryAuthorized && (
             <div className="input-group">
-              <label className="input-label">Assigned Branch</label>
-              <select
-                className="input bg-white text-base sm:text-sm"
-                value={formData.branch_id}
-                onChange={e => { setFormError(null); setFormData({ ...formData, branch_id: e.target.value }); }}
-              >
-                <option value="">Select branch...</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between">
+                <label className="input-label mb-0">Branch Assignments</label>
+                <span className="text-xs text-muted">
+                  {formData.branch_ids.length === 0
+                    ? 'Unassigned'
+                    : `${formData.branch_ids.length} branch${formData.branch_ids.length === 1 ? '' : 'es'} selected`}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
+                {branches.map(b => {
+                  const checked = formData.branch_ids.includes(b.id);
+                  return (
+                    <label
+                      key={b.id}
+                      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-sm cursor-pointer transition-colors ${
+                        checked
+                          ? 'border-indigo-500 bg-indigo-50/60 text-indigo-950 font-medium'
+                          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        checked={checked}
+                        onChange={() => toggleBranchSelection(b.id)}
+                      />
+                      <span>{b.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted mt-1">
+                Select one or more branches for this teacher, or leave unchecked to keep unassigned.
+              </p>
             </div>
           )}
           <div className="input-group">

@@ -55,13 +55,26 @@ export const Classes: React.FC = () => {
         .select('*, staff(name), branches(name)')
         .eq('business_id', businessId)
         .order('created_at', { ascending: false }),
-      supabase.from('staff').select('id, name').eq('business_id', businessId)
+      supabase.rpc('get_staff_directory', { p_business_id: businessId })
     ]);
     
     if (groupsRes.data) setGroups(groupsRes.data as Group[]);
-    if (teachersRes.data) setTeachers(teachersRes.data);
+    if (Array.isArray(teachersRes.data)) {
+      const rows = teachersRes.data as { id: string; name: string; branch_id?: string | null; branch_ids?: string[] | null }[];
+      setTeachers(
+        selectedBranchId
+          ? rows
+              .filter((r) =>
+                Array.isArray(r.branch_ids)
+                  ? r.branch_ids.includes(selectedBranchId)
+                  : r.branch_id === selectedBranchId
+              )
+              .map((r) => ({ id: r.id, name: r.name }))
+          : rows.map((r) => ({ id: r.id, name: r.name }))
+      );
+    }
     setLoading(false);
-  }, [businessId]);
+  }, [businessId, selectedBranchId]);
 
   useEffect(() => {
     fetchData();

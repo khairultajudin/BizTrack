@@ -708,7 +708,8 @@ assert(
   dashboardSrc.includes("supabase.rpc('get_financial_summary'") &&
   dashboardSrc.includes("recentExpQuery = recentExpQuery.eq('branch_id', selectedBranchId)") &&
   dashboardSrc.includes("filterVisibleExpenses(recentExp.data || [], isSalaryAuthorized)") &&
-  dashboardSrc.includes("staffQuery = staffQuery.eq('branch_id', selectedBranchId)") &&
+  dashboardSrc.includes("supabase.rpc('get_staff_directory'") &&
+  dashboardSrc.includes("branch_ids") &&
   dashboardSrc.includes("supabase.rpc('get_payroll_reconciliation_summary'"),
   'Dashboard.tsx uses centralized get_financial_summary RPC, filters recent expenses by branch & salary authorization, and surfaces unmapped payroll reconciliation notice'
 );
