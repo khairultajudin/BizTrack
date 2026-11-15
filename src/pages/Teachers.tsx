@@ -20,6 +20,47 @@ interface Staff {
   salary_amount?: number;
 }
 
+export function TeachersEmptyState({
+  isSalaryAuthorized,
+  onAddTeacher,
+}: {
+  isSalaryAuthorized: boolean;
+  onAddTeacher?: () => void;
+}) {
+  if (!isSalaryAuthorized) {
+    return (
+      <EmptyState
+        icon={GraduationCap}
+        title="No teachers assigned"
+        description="No teachers are currently assigned to your branch directory."
+      />
+    );
+  }
+
+  return (
+    <EmptyState
+      icon={GraduationCap}
+      title="No teachers yet"
+      description="Add your first teacher to start assigning them to classes and managing payroll."
+      actionLabel="Add Teacher"
+      onAction={onAddTeacher}
+    >
+      <div className="guide-box">
+        <span style={{ fontWeight: 600 }}>💡 Recommended Setup Sequence:</span>
+        <div className="guide-steps-flow">
+          <span className="guide-step highlight">1. Add Teachers</span>
+          <span>➔</span>
+          <span className="guide-step">2. Create Classes</span>
+          <span>➔</span>
+          <span className="guide-step">3. Add Students</span>
+          <span>➔</span>
+          <span className="guide-step">4. Payments</span>
+        </div>
+      </div>
+    </EmptyState>
+  );
+}
+
 export function getAssignedBranchIds(member: Pick<Staff, 'branch_id' | 'branch_ids'>): string[] {
   if (Array.isArray(member.branch_ids)) {
     return member.branch_ids.filter((id): id is string => Boolean(id));
@@ -577,26 +618,7 @@ export const Teachers: React.FC = () => {
           <span>Loading teachers...</span>
         </div>
       ) : staff.length === 0 ? (
-        <EmptyState 
-          icon={GraduationCap} 
-          title="No teachers yet" 
-          description="Add your first teacher to start assigning them to classes and managing payroll."
-          actionLabel="Add Teacher"
-          onAction={openNewModal}
-        >
-          <div className="guide-box">
-            <span style={{ fontWeight: 600 }}>💡 Recommended Setup Sequence:</span>
-            <div className="guide-steps-flow">
-              <span className="guide-step highlight">1. Add Teachers</span>
-              <span>➔</span>
-              <span className="guide-step">2. Create Classes</span>
-              <span>➔</span>
-              <span className="guide-step">3. Add Students</span>
-              <span>➔</span>
-              <span className="guide-step">4. Payments</span>
-            </div>
-          </div>
-        </EmptyState>
+        <TeachersEmptyState isSalaryAuthorized={isSalaryAuthorized} onAddTeacher={openNewModal} />
       ) : filteredStaff.length === 0 ? (
         <div className="card p-8 text-center text-gray-500">
           <p className="font-medium text-base text-gray-700">No matching teachers found</p>

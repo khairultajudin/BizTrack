@@ -6,11 +6,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from '../src/context/AuthContext';
 import { BranchContext } from '../src/context/BranchContext';
 import { TemplateContext } from '../src/context/TemplateContext';
-import { Teachers, getAssignedBranchIds } from '../src/pages/Teachers';
+import { Teachers, TeachersEmptyState, getAssignedBranchIds } from '../src/pages/Teachers';
 
 const TARGET_SALARY_ADMIN_UID = 'd2b660bf-10d3-4d94-94ec-0b8f6e0908e6';
 const TARGET_SALARY_BIZ_ID = '978d2b0c-6a2b-4c28-9000-71dc23f96781';
 const PAUH_STAFF_UID = '1d602572-2048-4526-bac0-05839ac06471';
+const KELISA_STAFF_UID = '2877f207-c3ff-4339-ad4e-823a3bd24e5f';
 const GENERIC_ADMIN_UID = 'a11c9c2b-364d-4aca-b6f1-90e9024c4a6e';
 const PAUH_BRANCH_ID = '9420a109-4a28-47f3-93ff-f4be08012719';
 const KELISA_BRANCH_ID = 'e4f61aac-9629-4be7-ae7e-8d9b462233a4';
@@ -104,11 +105,30 @@ assert(hanaHtml.includes('Add Teacher'), 'Puan Hana sees Add Teacher control');
 assert(hanaHtml.includes('Manage your staff and instructors.'), 'Puan Hana sees manager subtitle');
 
 const staffHtml = renderTeachersPage(PAUH_STAFF_UID, 'Staff');
-assert(!staffHtml.includes('Add Teacher'), 'Branch Staff does not see Add Teacher control');
-assert(staffHtml.includes('View your branch teacher directory.'), 'Branch Staff sees directory-only subtitle');
+assert(!staffHtml.includes('Add Teacher'), 'Pauh Jaya Staff does not see Add Teacher control');
+assert(!staffHtml.includes('Branch Assignments'), 'Pauh Jaya Staff does not see Branch Assignments controls');
+assert(staffHtml.includes('View your branch teacher directory.'), 'Pauh Jaya Staff sees directory-only subtitle');
+
+const kelisaStaffHtml = renderTeachersPage(KELISA_STAFF_UID, 'Staff');
+assert(!kelisaStaffHtml.includes('Add Teacher'), 'Kelisa Emas Staff does not see Add Teacher control');
+assert(!kelisaStaffHtml.includes('Branch Assignments'), 'Kelisa Emas Staff does not see Branch Assignments controls');
+assert(kelisaStaffHtml.includes('View your branch teacher directory.'), 'Kelisa Emas Staff sees directory-only subtitle');
 
 const genericAdminHtml = renderTeachersPage(GENERIC_ADMIN_UID, 'Admin');
 assert(!genericAdminHtml.includes('Add Teacher'), 'Generic Admin does not inherit Puan Hana teacher/assignment controls');
+
+const hanaEmptyHtml = renderToString(
+  <TeachersEmptyState isSalaryAuthorized={true} onAddTeacher={() => {}} />
+);
+assert(hanaEmptyHtml.includes('Add Teacher'), 'Puan Hana empty state retains Add Teacher CTA');
+assert(hanaEmptyHtml.includes('No teachers yet'), 'Puan Hana empty state shows onboarding title');
+
+const branchStaffEmptyHtml = renderToString(
+  <TeachersEmptyState isSalaryAuthorized={false} onAddTeacher={() => {}} />
+);
+assert(!branchStaffEmptyHtml.includes('Add Teacher'), 'Branch Staff empty state hides Add Teacher CTA');
+assert(!branchStaffEmptyHtml.includes('Edit') && !branchStaffEmptyHtml.includes('Delete'), 'Branch Staff empty state has no Edit/Delete controls');
+assert(branchStaffEmptyHtml.includes('No teachers assigned'), 'Branch Staff empty state shows neutral message');
 
 // 3. Static source & migration guardrails
 const teachersSrc = fs.readFileSync(path.resolve('src/pages/Teachers.tsx'), 'utf8');
